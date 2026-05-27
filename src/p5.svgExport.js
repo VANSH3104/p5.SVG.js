@@ -139,7 +139,19 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       this.width = pInst.width;
       this.height = pInst.height;
 
-      this.elements = [];
+      // Initialize root SVG DOM element with the standard namespace
+      this.svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      this.svgElement.setAttribute('width', this.width);
+      this.svgElement.setAttribute('height', this.height);
+      this.svgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`);
+    }
+
+    _createElement(tagName, attrs = {}) {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', tagName);
+      for (const [key, val] of Object.entries(attrs)) {
+        el.setAttribute(key, val);
+      }
+      return el;
     }
 
     visitTriangle(triangle) {
@@ -147,7 +159,11 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         .map(v => `${v.position.x},${v.position.y}`)
         .join(' ');
 
-      this.elements.push(`  <polygon points="${pts}" fill="black" />`);
+      const polygon = this._createElement('polygon', {
+        points: pts,
+        fill: 'black'
+      });
+      this.svgElement.appendChild(polygon);
     }
 
     visitEllipsePrimitive(ellipse) {
@@ -157,9 +173,22 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       const ry = ellipse.h / 2;
 
       if (ellipse.w === ellipse.h) {
-        this.elements.push(`  <circle cx="${cx}" cy="${cy}" r="${rx}" fill="black" />`);
+        const circle = this._createElement('circle', {
+          cx: cx,
+          cy: cy,
+          r: rx,
+          fill: 'black'
+        });
+        this.svgElement.appendChild(circle);
       } else {
-        this.elements.push(`  <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="black" />`);
+        const ellipseEl = this._createElement('ellipse', {
+          cx: cx,
+          cy: cy,
+          rx: rx,
+          ry: ry,
+          fill: 'black'
+        });
+        this.svgElement.appendChild(ellipseEl);
       }
     }
 
@@ -168,13 +197,16 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         .map(v => `${v.position.x},${v.position.y}`)
         .join(' ');
 
-      this.elements.push(`  <polygon points="${pts}" fill="black" />`);
+      const polygon = this._createElement('polygon', {
+        points: pts,
+        fill: 'black'
+      });
+      this.svgElement.appendChild(polygon);
     }
 
     buildSVG() {
-      return `<svg width="${this.width}" height="${this.height}" viewBox="0 0 ${this.width} ${this.height}" xmlns="http://www.w3.org/2000/svg">\n` +
-             this.elements.join('\n') +
-             `\n</svg>`;
+      const serializer = new XMLSerializer();
+      return serializer.serializeToString(this.svgElement);
     }
   }
 
