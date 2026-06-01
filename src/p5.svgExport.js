@@ -1,129 +1,102 @@
 export function SVGExportAddon(p5, fn, lifecycles) {
-  fn._svgCaptureAdapters = function(){
-    return {
-      rect: {
-        intercept(renderer, recorder) {
-          const original = renderer.rect;
-          if (!original) return null;
+  // --- TransformStack ---
+  class TransformStack {
+    constructor() {
+      this.stack = [new DOMMatrix()];
+    }
 
-          renderer.rect = (...args) => {
-            if (recorder.active) {
-              const actualArgs = Array.isArray(args[0]) ? args[0] : args;
-              const [x, y, w, h] = actualArgs;
-              const p = recorder.p5;
+    push() {
+      this.stack.push(new DOMMatrix(this.current));
+    }
 
-              // Construct proper p5.Shape using Quad primitive (4 vertices)
-              const shape = new p.constructor.Shape({
-                position: new p.constructor.Vector(0, 0)
-              });
+    pop() {
+      if (this.stack.length > 1) this.stack.pop();
+    }
 
-              shape.beginShape(p.QUADS);
-              shape.vertex({ x, y });
-              shape.vertex({ x: x + w, y });
-              shape.vertex({ x: x + w, y: y + h });
-              shape.vertex({ x, y: y + h });
-              shape.endShape(p.CLOSE);
+    translate(x, y) {
+      this.current.translateSelf(x, y);
+    }
 
-              recorder.items.push({
-                shape,
-                state:
-                  recorder.p5
-                    ._svgCaptureState()
-              });
-            }
-            return original.apply(renderer, args);
-          };
+    rotate(rad) {
+      this.current.rotateSelf(rad * 180 / Math.PI);
+    }
 
-          // Return restore function
-          return () => {
-            renderer.rect = original;
-          };
-        }
-      },
+    scale(x, y) {
+      this.current.scaleSelf(x, y !== undefined ? y : x);
+    }
 
-      ellipse: {
-        intercept(renderer, recorder) {
-          const original = renderer.ellipse;
-          if (!original) return null;
-
-          renderer.ellipse = (...args) => {
-            if (recorder.active) {
-              const actualArgs = Array.isArray(args[0]) ? args[0] : args;
-              const [x, y, w, h] = actualArgs;
-              const p = recorder.p5;
-
-              // Construct proper p5.Shape using native EllipsePrimitive
-              const shape = new p.constructor.Shape({
-                position: new p.constructor.Vector(0, 0)
-              });
-
-              shape.beginShape();
-              shape.ellipsePrimitive(x, y, w, h);
-              shape.endShape();
-
-              recorder.items.push({
-                shape,
-                state:
-                  recorder.p5
-                    ._svgCaptureState()
-              });
-            }
-            return original.apply(renderer, args);
-          };
-
-          // Return restore function
-          return () => {
-            renderer.ellipse = original;
-          };
-        }
-      },
-
-      triangle: {
-        intercept(renderer, recorder) {
-          const original = renderer.triangle;
-          if (!original) return null;
-
-          renderer.triangle = (...args) => {
-            if (recorder.active) {
-              const actualArgs = Array.isArray(args[0]) ? args[0] : args;
-              console.log('Intercepted triangle with args:', actualArgs);
-              const [x1, y1, x2, y2, x3, y3] = actualArgs;
-              const p = recorder.p5;
-
-              // Construct proper p5.Shape using native TRIANGLES primitive
-              const shape = new p.constructor.Shape({
-                position: new p.constructor.Vector(0, 0)
-              });
-
-              shape.beginShape(p.TRIANGLES);
-              shape.vertex({ x: x1, y: y1 });
-              shape.vertex({ x: x2, y: y2 });
-              shape.vertex({ x: x3, y: y3 });
-              shape.endShape(p.CLOSE);
-
-              recorder.items.push({
-                shape,
-                state:
-                  recorder.p5
-                    ._svgCaptureState()
-              });
-            }
-            return original.apply(renderer, args);
-          };
-
-          // Return restore function
-          return () => {
-            renderer.triangle = original;
-          };
-        }
-      }
+    get current() {
+      return this.stack[this.stack.length - 1];
     }
   }
-  fn._svgCaptureState = function() {
+
+
+
+  fn._svgCaptureAdapters = function () {
     return {
-      //capture relevant p5 state here as needed (e.g. fill, stroke, transformations)
-    };
+
+      drawShape: {
+        intercept(renderer, recorder) {
+          const original = renderer.drawShape;
+          if (!original) return null;
+
+          renderer.drawShape = function (shape) {
+            const state = recorder.p5._svgCaptureState();
+            if (recorder.active) {
+
+              recorder.items.push({
+                type: 'shape',
+                shape,
+                state:
+                  recorder.p5
+                    ._svgCaptureState()
+              });
+            }
+            return original.call(renderer, shape);
+          };
+
+          // Return restore function
+          return () => {
+            renderer.drawShape = original;
+          };
+        }
+      },
+
+      background: {
+        intercept(renderer, recorder) {
+          const original = renderer.background;
+
+          renderer.background = (...args) => {
+            if (recorder.active) {
+              const c = recorder.p5.color(...args);
+              recorder.items.push({
+                type: 'background',
+                color: c
+              });
+            }
+            return original.apply(renderer, args);
+          };
+
+          return () => {
+            renderer.background = original;
+          };
+        }
+      },
+    }
   }
+
+  fn._svgCaptureState = function () {
+    const recorder = this._activeRecorder;
+    return {
+      transform: recorder ? new DOMMatrix(
+        recorder.tStack.current
+      ) : new DOMMatrix(),
+
+      fill: this._renderer.states.fillColor,
+      stroke: this._renderer.states.strokeColor,
+      strokeWeight: this._renderer.states.strokeWeight
+    };
+  };
 
 
   // ---------------------------------------------------
@@ -154,16 +127,73 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       return el;
     }
 
-    visitTriangle(triangle) {
-      const pts = triangle.vertices
-        .map(v => `${v.position.x},${v.position.y}`)
-        .join(' ');
+    colorToSVG(color) {
+      if (!color) {
+        return 'none';
+      }
 
-      const polygon = this._createElement('polygon', {
-        points: pts,
-        fill: 'black'
+      if (typeof color === 'string') {
+        return color;
+      }
+
+      if (typeof color.toString === 'function') {
+
+        const str = color.toString();
+
+        if (str === 'rgba(0,0,0,0)') {
+          return 'none';
+        }
+
+        return str;
+      }
+
+      return 'none';
+    }
+
+    _applyStyle(el) {
+      const state = this.currentState;
+
+      if (!state) {
+        return;
+      }
+
+      el.setAttribute('fill', this.colorToSVG(state.fill));
+      el.setAttribute('stroke', this.colorToSVG(state.stroke));
+
+      if (state.stroke && state.strokeWeight != null) {
+        el.setAttribute('stroke-width', state.strokeWeight);
+      }
+    }
+
+    _appendShapeElement(el) {
+      const m = this.currentState?.transform;
+
+      if (
+        m &&
+        !(m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.e === 0 && m.f === 0)
+      ) {
+        const g = this._createElement('g');
+        g.setAttribute('transform', `matrix(${m.a} ${m.b} ${m.c} ${m.d} ${m.e} ${m.f})`);
+        g.appendChild(el);
+        this.svgElement.appendChild(g);
+        return;
+      }
+
+      this.svgElement.appendChild(el);
+    }
+
+    addBackground(item) {
+      const fillStr = this.colorToSVG(item.color);
+
+      const rect = this._createElement('rect', {
+        x: 0,
+        y: 0,
+        width: this.width,
+        height: this.height,
+        fill: fillStr
       });
-      this.svgElement.appendChild(polygon);
+
+      this.svgElement.appendChild(rect);
     }
 
     visitEllipsePrimitive(ellipse) {
@@ -177,9 +207,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           cx: cx,
           cy: cy,
           r: rx,
-          fill: 'black'
         });
-        this.svgElement.appendChild(circle);
+        this._applyStyle(circle);
+        this._appendShapeElement(circle);
       } else {
         const ellipseEl = this._createElement('ellipse', {
           cx: cx,
@@ -188,21 +218,11 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           ry: ry,
           fill: 'black'
         });
-        this.svgElement.appendChild(ellipseEl);
+        this._applyStyle(ellipseEl);
+        this._appendShapeElement(ellipseEl);
       }
     }
 
-    visitQuad(quad) {
-      const pts = quad.vertices
-        .map(v => `${v.position.x},${v.position.y}`)
-        .join(' ');
-
-      const polygon = this._createElement('polygon', {
-        points: pts,
-        fill: 'black'
-      });
-      this.svgElement.appendChild(polygon);
-    }
 
     buildSVG() {
       const serializer = new XMLSerializer();
@@ -219,16 +239,18 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       this.p5 = pInst;
       this.active = false;
       this.items = [];
+      this.tStack = new TransformStack();
       this.restores = [];
+      this._isTransforming = false;
     }
 
     start() {
       this.active = true;
       this.items = [];
       this.restores = [];
-
+      this._interceptTransforms();
       const renderer = this.p5._renderer;
-      const adapters =this.p5._svgCaptureAdapters();
+      const adapters = this.p5._svgCaptureAdapters();
       if (renderer) {
         for (const name in adapters) {
           const restore = adapters[name].intercept(renderer, this);
@@ -247,6 +269,67 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       this.restores = [];
     }
 
+    _interceptTransforms() {
+      const p = this.p5;
+      const renderer = p._renderer;
+
+      const transformHandlers = {
+        push: () => {
+          this.tStack.push();
+        },
+        pop: () => {
+          this.tStack.pop();
+        },
+        translate: (args) => {
+          this.tStack.translate(args[0] || 0, args[1] || 0);
+        },
+        rotate: (args) => {
+          this.tStack.rotate(args[0] || 0);
+        },
+        scale: (args) => {
+          this.tStack.scale(args[0] || 1, args[1]);
+        }
+      };
+
+      Object.keys(transformHandlers).forEach(method => {
+        const updateStack = (args) => {
+          if (!this.active || this._isTransforming) {
+            return;
+          }
+          this._isTransforming = true;
+          try {
+            transformHandlers[method](args);
+          } finally {
+            this._isTransforming = false;
+          }
+        };
+
+        // Intercept p5 instance
+        const origP5 = p[method];
+        if (typeof origP5 === 'function') {
+          p[method] = (...args) => {
+            updateStack(args);
+            return origP5.apply(p, args);
+          };
+          this.restores.push(() => {
+            p[method] = origP5;
+          });
+        }
+
+        // Intercept renderer too
+        if (renderer && typeof renderer[method] === 'function') {
+          const origR = renderer[method];
+          renderer[method] = (...args) => {
+            updateStack(args);
+            return origR.apply(renderer, args);
+          };
+          this.restores.push(() => {
+            renderer[method] = origR;
+          });
+        }
+      });
+    }
+
     getRecord() {
       return this.items;
     }
@@ -258,17 +341,24 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
   fn.buildShape = function (callback) {
     const recorder = new ShapeRecorder(this);
+    this._activeRecorder = recorder;
     recorder.start();
     callback();
     recorder.stop();
+    this._activeRecorder = null;
     return recorder.getRecord();
   };
 
   fn.saveSVG = function (record, filename = 'drawing.svg') {
     // Save the SVG record to a file
     const visitor = new SVGVisitor(this);
-    for (const items of record) {
-        items.shape.accept(visitor);
+    for (const item of record) {
+      if (item.type === 'background') {
+        visitor.addBackground(item);
+        continue;
+      }
+      visitor.currentState = item.state;
+      item.shape.accept(visitor);
     }
 
     const svg = visitor.buildSVG();
@@ -295,6 +385,6 @@ export function SVGExportAddon(p5, fn, lifecycles) {
   fn.saveAsSVG = fn.saveSVG;
 };
 
-if(typeof p5 !== 'undefined'){
+if (typeof p5 !== 'undefined') {
   p5.registerAddon(SVGExportAddon);
 }
