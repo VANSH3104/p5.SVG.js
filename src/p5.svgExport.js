@@ -1,5 +1,29 @@
 export function SVGExportAddon(p5, fn, lifecycles) {
-  // --- TransformStack ---
+
+  class NodeBase {
+    constructor() {
+      this.children = [];
+    }
+    add(child) {
+      this.children.push(child);
+    }
+  }
+
+  class GroupNode extends NodeBase {
+    constructor() {
+      super();
+      this.type = 'group';
+    }
+  }
+
+  class TransformNode extends NodeBase {
+    constructor(matrix) {
+      super();
+      this.type = 'transform';
+      this.matrix = matrix;
+    }
+  }
+
   class TransformStack {
     constructor() {
       this.stack = [new DOMMatrix()];
@@ -41,10 +65,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           if (!original) return null;
 
           renderer.drawShape = function (shape) {
-            const state = recorder.p5._svgCaptureState();
             if (recorder.active) {
-
-              recorder.items.push({
+              const parent = recorder.transformStack.length ? recorder.transformStack[recorder.transformStack.length - 1] : recorder.currentGroup;
+              parent.add({
                 type: 'shape',
                 shape,
                 state:
@@ -69,7 +92,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           renderer.background = (...args) => {
             if (recorder.active) {
               const c = recorder.p5.color(...args);
-              recorder.items.push({
+              recorder.currentGroup.add({
                 type: 'background',
                 color: c
               });
@@ -86,12 +109,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
   }
 
   fn._svgCaptureState = function () {
-    const recorder = this._activeRecorder;
     return {
-      transform: recorder ? new DOMMatrix(
-        recorder.tStack.current
-      ) : new DOMMatrix(),
-
       fill: this._renderer.states.fillColor,
       stroke: this._renderer.states.strokeColor,
       strokeWeight: this._renderer.states.strokeWeight
@@ -114,6 +132,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
       // Initialize root SVG DOM element with the standard namespace
       this.svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      this.currentParent = this.svgElement;
       this.svgElement.setAttribute('width', this.width);
       this.svgElement.setAttribute('height', this.height);
       this.svgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`);
@@ -127,26 +146,27 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       return el;
     }
 
+    _isIdentity(m) {
+      return m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.e === 0 && m.f === 0;
+    }
+
+    _createGroup(matrix) {
+      const g = this._createElement('g');
+      if (matrix && !this._isIdentity(matrix)) {
+        g.setAttribute(
+          'transform',
+          `matrix(${matrix.a} ${matrix.b} ${matrix.c} ${matrix.d} ${matrix.e} ${matrix.f})`
+        );
+      }
+
+      return g;
+    }
+
     colorToSVG(color) {
-      if (!color) {
-        return 'none';
-      }
-
-      if (typeof color === 'string') {
-        return color;
-      }
-
-      if (typeof color.toString === 'function') {
-
-        const str = color.toString();
-
-        if (str === 'rgba(0,0,0,0)') {
-          return 'none';
-        }
-
-        return str;
-      }
-
+      if (!color) return 'none';
+      if (typeof color === 'string') return color;
+      if (color.levels && color.levels[3] === 0) return 'none';
+      if (typeof color.toString === 'function') return color.toString();
       return 'none';
     }
 
@@ -166,20 +186,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     }
 
     _appendShapeElement(el) {
-      const m = this.currentState?.transform;
-
-      if (
-        m &&
-        !(m.a === 1 && m.b === 0 && m.c === 0 && m.d === 1 && m.e === 0 && m.f === 0)
-      ) {
-        const g = this._createElement('g');
-        g.setAttribute('transform', `matrix(${m.a} ${m.b} ${m.c} ${m.d} ${m.e} ${m.f})`);
-        g.appendChild(el);
-        this.svgElement.appendChild(g);
-        return;
-      }
-
-      this.svgElement.appendChild(el);
+      this.currentParent.appendChild(el);
     }
 
     addBackground(item) {
@@ -216,17 +223,42 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           cy: cy,
           rx: rx,
           ry: ry,
-          fill: 'black'
         });
         this._applyStyle(ellipseEl);
         this._appendShapeElement(ellipseEl);
       }
     }
 
-
     buildSVG() {
       const serializer = new XMLSerializer();
       return serializer.serializeToString(this.svgElement);
+    }
+
+    visit(node, parent = this.svgElement, currentTransform = new DOMMatrix()) {
+      if (node.type === 'group') {
+        for (const child of node.children) {
+          this.visit(child, parent, currentTransform);
+        }
+        return;
+      }
+      if (node.type === 'transform') {
+        const relativeMatrix = currentTransform.inverse().multiply(node.matrix);
+        const g = this._createGroup(relativeMatrix);
+        parent.appendChild(g);
+        for (const child of node.children) {
+          this.visit(child, g, node.matrix);
+        }
+        return;
+      }
+      if (node.type === 'background') {
+        this.addBackground(node);
+        return;
+      }
+      if (node.type === 'shape') {
+        this.currentParent = parent;
+        this.currentState = node.state;
+        node.shape.accept(this);
+      }
     }
   }
 
@@ -238,15 +270,27 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     constructor(pInst) {
       this.p5 = pInst;
       this.active = false;
-      this.items = [];
-      this.tStack = new TransformStack();
+      this.root = new GroupNode();
+      this.groupStack = [this.root];
+      this.matrixStack = new TransformStack();
+      this.transformStack = [];
+      this.pushFrames = [];
       this.restores = [];
+      // Re-entrancy guard: intercept handlers call p5 transform methods which would
+      // trigger the intercept again. This flag breaks the cycle.
       this._isTransforming = false;
+    }
+
+    get currentGroup() {
+      return this.groupStack[
+        this.groupStack.length - 1
+      ];
     }
 
     start() {
       this.active = true;
-      this.items = [];
+      this.root = new GroupNode();
+      this.groupStack = [this.root];
       this.restores = [];
       this._interceptTransforms();
       const renderer = this.p5._renderer;
@@ -269,25 +313,66 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       this.restores = [];
     }
 
+    _addTransformNode() {
+      const node = new TransformNode(new DOMMatrix(this.matrixStack.current));
+      const localStart = this.pushFrames.length 
+        ? this.pushFrames[this.pushFrames.length - 1] 
+        : 0;
+      if (this.transformStack.length === localStart) {
+        this.currentGroup.add(node);
+      } else {
+        this.transformStack[this.transformStack.length - 1].add(node);
+      }
+      this.transformStack.push(node);
+    }
+
     _interceptTransforms() {
       const p = this.p5;
       const renderer = p._renderer;
 
       const transformHandlers = {
         push: () => {
-          this.tStack.push();
+          this.matrixStack.push();
+          const group = new GroupNode();
+          if (this.transformStack.length > 0) {
+            this.transformStack[this.transformStack.length - 1].add(group);
+          } else {
+            this.currentGroup.add(group);
+          }
+          this.groupStack.push(group);
+          this.pushFrames.push(this.transformStack.length);
         },
         pop: () => {
-          this.tStack.pop();
+          this.matrixStack.pop();
+          if (this.groupStack.length > 1) {
+            this.groupStack.pop();
+          }
+          if (this.pushFrames.length > 0) {
+            const targetLen = this.pushFrames.pop();
+            while (this.transformStack.length > targetLen) {
+              this.transformStack.pop();
+            }
+          }
         },
         translate: (args) => {
-          this.tStack.translate(args[0] || 0, args[1] || 0);
+          const x = args[0] || 0;
+          const y = args[1] || 0;
+
+          this.matrixStack.translate(x, y);
+          this._addTransformNode();
         },
         rotate: (args) => {
-          this.tStack.rotate(args[0] || 0);
+          const angle = args[0] || 0;
+
+          this.matrixStack.rotate(angle);
+          this._addTransformNode();
         },
         scale: (args) => {
-          this.tStack.scale(args[0] || 1, args[1]);
+          const x = args[0] || 1;
+          const y = args[1];
+
+          this.matrixStack.scale(x, y);
+          this._addTransformNode();
         }
       };
 
@@ -331,7 +416,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     }
 
     getRecord() {
-      return this.items;
+      return this.root;
     }
   }
 
@@ -341,26 +426,19 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
   fn.buildShape = function (callback) {
     const recorder = new ShapeRecorder(this);
-    this._activeRecorder = recorder;
     recorder.start();
-    callback();
-    recorder.stop();
-    this._activeRecorder = null;
+    try {
+      callback();
+    } finally {
+      recorder.stop();
+    }
     return recorder.getRecord();
   };
 
   fn.saveSVG = function (record, filename = 'drawing.svg') {
     // Save the SVG record to a file
     const visitor = new SVGVisitor(this);
-    for (const item of record) {
-      if (item.type === 'background') {
-        visitor.addBackground(item);
-        continue;
-      }
-      visitor.currentState = item.state;
-      item.shape.accept(visitor);
-    }
-
+    visitor.visit(record);
     const svg = visitor.buildSVG();
 
     const blob = new Blob(
