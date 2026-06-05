@@ -6,7 +6,7 @@ export default [
     output: {
       file: 'dist/p5.svgExport.min.js',
       format: 'iife',
-      name: 'addonTemplate',
+      name: 'p5.SVG',
       plugins: [
         terser()
       ]
