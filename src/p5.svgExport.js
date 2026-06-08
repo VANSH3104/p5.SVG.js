@@ -14,6 +14,11 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       super();
       this.type = 'group';
     }
+    toSVGElement(visitor, parent, currentTransform) {
+      for (const child of this.children) {
+        visitor.visit(child, parent, currentTransform);
+      }
+    }
   }
 
   class TransformNode extends NodeBase {
@@ -21,6 +26,47 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       super();
       this.type = 'transform';
       this.matrix = matrix;
+    }
+    toSVGElement(visitor, parent, currentTransform) {
+      const relativeMatrix = currentTransform.inverse().multiply(this.matrix);
+      const g = visitor._createGroup(relativeMatrix);
+      parent.appendChild(g);
+      for (const child of this.children) {
+        child.toSVGElement(visitor, g, this.matrix);
+      }
+    }
+  }
+
+  class ShapeNode extends NodeBase {
+    constructor(shape, state) {
+      super();
+      this.type = 'shape';
+      this.shape = shape;
+      this.state = state;
+    }
+    toSVGElement(visitor, parent) {
+      visitor.currentParent = parent;
+      visitor.currentState = this.state;
+      this.shape.accept(visitor);
+    }
+  }
+  
+  class BackgroundNode extends NodeBase {
+    constructor(color) {
+      super();
+      this.type = 'background';
+      this.color = color;
+    }
+    toSVGElement(visitor) {
+      visitor.addBackground(this);
+    }
+  }
+
+  class ClearNode extends NodeBase {
+    toSVGElement(visitor) {
+      while (visitor.svgElement.firstChild) {
+        visitor.svgElement.removeChild(visitor.svgElement.firstChild);
+      }
     }
   }
 
@@ -67,13 +113,12 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           renderer.drawShape = function (shape) {
             if (recorder.active) {
               const parent = recorder.transformStack.length ? recorder.transformStack[recorder.transformStack.length - 1] : recorder.currentGroup;
-              parent.add({
-                type: 'shape',
-                shape,
-                state:
-                  recorder.p5
-                    ._svgCaptureState()
-              });
+              parent.add(
+                new ShapeNode(
+                  shape,
+                  recorder.p5._svgCaptureState()
+                )
+              );
             }
             return original.call(renderer, shape);
           };
@@ -92,10 +137,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           renderer.background = (...args) => {
             if (recorder.active) {
               const c = recorder.p5.color(...args);
-              recorder.currentGroup.add({
-                type: 'background',
-                color: c
-              });
+              recorder.currentGroup.add(
+                new BackgroundNode(c)
+              );
             }
             return original.apply(renderer, args);
           };
@@ -241,24 +285,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         }
         return;
       }
-      if (node.type === 'transform') {
-        const relativeMatrix = currentTransform.inverse().multiply(node.matrix);
-        const g = this._createGroup(relativeMatrix);
-        parent.appendChild(g);
-        for (const child of node.children) {
-          this.visit(child, g, node.matrix);
-        }
-        return;
-      }
-      if (node.type === 'background') {
-        this.addBackground(node);
-        return;
-      }
-      if (node.type === 'shape') {
-        this.currentParent = parent;
-        this.currentState = node.state;
-        node.shape.accept(this);
-      }
+      node.toSVGElement(this, parent, currentTransform);
     }
   }
 
