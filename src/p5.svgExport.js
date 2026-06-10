@@ -63,10 +63,12 @@ export function SVGExportAddon(p5, fn, lifecycles) {
   }
 
   class ClearNode extends NodeBase {
+    constructor() {
+      super();
+      this.type = 'clear';
+    }
     toSVGElement(visitor) {
-      while (visitor.svgElement.firstChild) {
-        visitor.svgElement.removeChild(visitor.svgElement.firstChild);
-      }
+      visitor.clear();
     }
   }
 
@@ -152,6 +154,31 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           };
         }
       },
+      clear: {
+        intercept(renderer, recorder) {
+          const original = renderer.clear;
+
+          renderer.clear = (...args) => {
+
+            if (recorder.active) {
+              const parent =
+                recorder.transformStack.length
+                  ? recorder.transformStack[
+                  recorder.transformStack.length - 1
+                  ]
+                  : recorder.currentGroup;
+
+              parent.add(new ClearNode());
+            }
+
+            return original.apply(renderer, args);
+          };
+
+          return () => {
+            renderer.clear = original;
+          };
+        }
+      }
     }
   }
 
@@ -252,6 +279,14 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         rect.setAttribute('transform', `matrix(${inverse.a} ${inverse.b} ${inverse.c} ${inverse.d} ${inverse.e} ${inverse.f})`);
       }
       parent.appendChild(rect);
+    }
+
+    clear() {
+      while (this.svgElement.firstChild) {
+        this.svgElement.removeChild(
+          this.svgElement.firstChild
+        );
+      }
     }
 
     visitEllipsePrimitive(ellipse) {
