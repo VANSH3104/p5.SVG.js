@@ -57,8 +57,8 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       this.type = 'background';
       this.color = color;
     }
-    toSVGElement(visitor) {
-      visitor.addBackground(this);
+    toSVGElement(visitor, parent, currentTransform) {
+      visitor.addBackground(this, parent, currentTransform);
     }
   }
 
@@ -137,7 +137,10 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           renderer.background = (...args) => {
             if (recorder.active) {
               const c = recorder.p5.color(...args);
-              recorder.currentGroup.add(
+              const parent = recorder.transformStack.length ? recorder.transformStack[
+                recorder.transformStack.length - 1
+              ] : recorder.currentGroup;
+              parent.add(
                 new BackgroundNode(c)
               );
             }
@@ -233,7 +236,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       this.currentParent.appendChild(el);
     }
 
-    addBackground(item) {
+    addBackground(item, parent, currentTransform) {
       const fillStr = this.colorToSVG(item.color);
 
       const rect = this._createElement('rect', {
@@ -243,8 +246,12 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         height: this.height,
         fill: fillStr
       });
+      if (!this._isIdentity(currentTransform)) {
+        const inverse = currentTransform.inverse();
 
-      this.svgElement.appendChild(rect);
+        rect.setAttribute('transform', `matrix(${inverse.a} ${inverse.b} ${inverse.c} ${inverse.d} ${inverse.e} ${inverse.f})`);
+      }
+      parent.appendChild(rect);
     }
 
     visitEllipsePrimitive(ellipse) {
