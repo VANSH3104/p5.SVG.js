@@ -1,4 +1,38 @@
 export function SVGExportAddon(p5, fn, lifecycles) {
+
+  class NodeBase {
+    constructor() {
+      this.children = [];
+    }
+    add(child) {
+      this.children.push(child);
+    }
+  }
+
+  class ShapeNode extends NodeBase {
+    constructor(shape, state) {
+      super();
+      this.type = 'shape';
+      this.shape = shape;
+      this.state = state;
+    }
+    toSVGElement(visitor) {
+      visitor.currentState = this.state;
+      this.shape.accept(visitor);
+    }
+  }
+
+  class BackgroundNode extends NodeBase {
+    constructor(color) {
+      super();
+      this.type = 'background';
+      this.color = color;
+    }
+    toSVGElement(visitor) {
+      visitor.addBackground(this);
+    }
+  }
+
   // --- TransformStack ---
   class TransformStack {
     constructor() {
@@ -41,16 +75,10 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           if (!original) return null;
 
           renderer.drawShape = function (shape) {
-            const state = recorder.p5._svgCaptureState();
             if (recorder.active) {
-
-              recorder.items.push({
-                type: 'shape',
-                shape,
-                state:
-                  recorder.p5
-                    ._svgCaptureState()
-              });
+              recorder.items.push(
+                new ShapeNode(shape, recorder.p5._svgCaptureState())
+              );
             }
             return original.call(renderer, shape);
           };
@@ -69,10 +97,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           renderer.background = (...args) => {
             if (recorder.active) {
               const c = recorder.p5.color(...args);
-              recorder.items.push({
-                type: 'background',
-                color: c
-              });
+              recorder.items.push(new BackgroundNode(c));
             }
             return original.apply(renderer, args);
           };
@@ -343,22 +368,20 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     const recorder = new ShapeRecorder(this);
     this._activeRecorder = recorder;
     recorder.start();
-    callback();
-    recorder.stop();
-    this._activeRecorder = null;
+    try {
+      callback();
+    } finally {
+      recorder.stop();
+      this._activeRecorder = null;
+    }
     return recorder.getRecord();
   };
 
   fn.saveSVG = function (record, filename = 'drawing.svg') {
     // Save the SVG record to a file
     const visitor = new SVGVisitor(this);
-    for (const item of record) {
-      if (item.type === 'background') {
-        visitor.addBackground(item);
-        continue;
-      }
-      visitor.currentState = item.state;
-      item.shape.accept(visitor);
+    for (const node of record) {
+      node.toSVGElement(visitor);
     }
 
     const svg = visitor.buildSVG();
