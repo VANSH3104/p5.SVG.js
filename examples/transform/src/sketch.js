@@ -63,5 +63,5 @@ function setup() {
 
   console.log(recorded);
 
-  // saveSVG(recorded);
+  // saveSVG(recorded, "flat.svg");
 }
