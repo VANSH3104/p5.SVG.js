@@ -7,6 +7,10 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     add(child) {
       this.children.push(child);
     }
+    isFlowBreak() {
+      return false;
+    }
+    renderFlowBreak(visitor) {}
   }
 
   class GroupNode extends NodeBase {
@@ -28,11 +32,75 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       this.matrix = matrix;
     }
     toSVGElement(visitor, parent, currentTransform) {
-      const relativeMatrix = currentTransform.inverse().multiply(this.matrix);
-      const g = visitor._createGroup(relativeMatrix);
-      parent.appendChild(g);
+      const relativeMatrix =
+        currentTransform.inverse().multiply(this.matrix);
+
+      const segments = [[]];
+      const flowBreaks = [];
+
       for (const child of this.children) {
-        child.toSVGElement(visitor, g, this.matrix);
+        if (child.isFlowBreak()) {
+          flowBreaks.push(child);
+          segments.push([]);
+          continue;
+        }
+        segments[segments.length - 1].push(child);
+      }
+
+      // Normal case: no background
+      // No backgrounds in this transform node
+      if (flowBreaks.length === 0) {
+        const g = visitor._createGroup(relativeMatrix);
+
+        parent.appendChild(g);
+
+        for (const child of this.children) {
+          child.toSVGElement(
+            visitor,
+            g,
+            this.matrix
+          );
+        }
+
+        return;
+      }
+
+      // Multiple background support
+      for (let i = 0; i < segments.length; i++) {
+        const segment = segments[i];
+
+        if (i === 0) {
+          const g = visitor._createGroup(
+            relativeMatrix
+          );
+
+          parent.appendChild(g);
+
+          for (const child of segment) {
+            child.toSVGElement(
+              visitor,
+              g,
+              this.matrix
+            );
+          }
+        } else {
+          const flowBreak = flowBreaks[i - 1];
+
+          flowBreak.renderFlowBreak(visitor);
+
+          const {
+            parent: rebuiltParent,
+            currentTransform: transformMatrix
+          } = visitor.rebuildHierarchy(flowBreak);
+
+          for (const child of segment) {
+            child.toSVGElement(
+              visitor,
+              rebuiltParent,
+              transformMatrix
+            );
+          }
+        }
       }
     }
   }
@@ -52,10 +120,21 @@ export function SVGExportAddon(p5, fn, lifecycles) {
   }
   
   class BackgroundNode extends NodeBase {
-    constructor(color) {
+    constructor(color, activeTransforms = []) {
       super();
       this.type = 'background';
       this.color = color;
+      this.activeTransforms = [...activeTransforms];
+    }
+    isFlowBreak() {
+      return true;
+    }
+    renderFlowBreak(visitor) {
+      visitor.addBackground(
+        this,
+        visitor.svgElement,
+        new DOMMatrix()
+      );
     }
     toSVGElement(visitor, parent, currentTransform) {
       visitor.addBackground(this, parent, currentTransform);
@@ -63,9 +142,16 @@ export function SVGExportAddon(p5, fn, lifecycles) {
   }
 
   class ClearNode extends NodeBase {
-    constructor() {
+    constructor(activeTransforms = []) {
       super();
       this.type = 'clear';
+      this.activeTransforms = [...activeTransforms];
+    }
+    isFlowBreak() {
+      return true;
+    }
+    renderFlowBreak(visitor) {
+      visitor.clear();
     }
     toSVGElement(visitor) {
       visitor.clear();
@@ -143,7 +229,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
                 recorder.transformStack.length - 1
               ] : recorder.currentGroup;
               parent.add(
-                new BackgroundNode(c)
+                new BackgroundNode(c, [...recorder.transformStack])
               );
             }
             return original.apply(renderer, args);
@@ -168,7 +254,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
                   ]
                   : recorder.currentGroup;
 
-              parent.add(new ClearNode());
+              parent.add(new ClearNode(
+                [...recorder.transformStack]
+              ));
             }
 
             return original.apply(renderer, args);
@@ -262,8 +350,50 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     _appendShapeElement(el) {
       this.currentParent.appendChild(el);
     }
+    _createHierarchy(transforms) {
+      let parent = this.svgElement;
+
+      let previous = new DOMMatrix();
+
+      for (const transformNode of transforms) {
+
+        const relative =
+          previous.inverse().multiply(
+            transformNode.matrix
+          );
+
+        const g = this._createGroup(relative);
+
+        parent.appendChild(g);
+
+        parent = g;
+
+        previous = transformNode.matrix;
+      }
+
+      return parent;
+    }
+
+    rebuildHierarchy(flowBreak) {
+      const parent = this._createHierarchy(
+        flowBreak.activeTransforms || []
+      );
+
+      const currentTransform =
+        flowBreak.activeTransforms && flowBreak.activeTransforms.length
+          ? flowBreak.activeTransforms[
+              flowBreak.activeTransforms.length - 1
+            ].matrix
+          : new DOMMatrix();
+
+      return {
+        parent,
+        currentTransform
+      };
+    }
 
     addBackground(item, parent, currentTransform) {
+  
       const fillStr = this.colorToSVG(item.color);
 
       const rect = this._createElement('rect', {
@@ -273,11 +403,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         height: this.height,
         fill: fillStr
       });
-      if (!this._isIdentity(currentTransform)) {
-        const inverse = currentTransform.inverse();
 
-        rect.setAttribute('transform', `matrix(${inverse.a} ${inverse.b} ${inverse.c} ${inverse.d} ${inverse.e} ${inverse.f})`);
-      }
       parent.appendChild(rect);
     }
 
