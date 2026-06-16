@@ -382,13 +382,16 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       };
 
       Object.keys(transformHandlers).forEach(method => {
-        const updateStack = (args) => {
-          if (!this.active || this._isTransforming) {
-            return;
+        const applyTransform = (origFn, context, args) => {
+          if (this._isTransforming) {
+            return origFn.apply(context, args);
           }
           this._isTransforming = true;
           try {
-            transformHandlers[method](args);
+            if (this.active) {
+              transformHandlers[method](args);
+            }
+            return origFn.apply(context, args);
           } finally {
             this._isTransforming = false;
           }
@@ -398,8 +401,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         const origP5 = p[method];
         if (typeof origP5 === 'function') {
           p[method] = (...args) => {
-            updateStack(args);
-            return origP5.apply(p, args);
+            return applyTransform(origP5, p, args);
           };
           this.restores.push(() => {
             p[method] = origP5;
@@ -410,8 +412,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         if (renderer && typeof renderer[method] === 'function') {
           const origR = renderer[method];
           renderer[method] = (...args) => {
-            updateStack(args);
-            return origR.apply(renderer, args);
+            return applyTransform(origR, renderer, args);
           };
           this.restores.push(() => {
             renderer[method] = origR;
