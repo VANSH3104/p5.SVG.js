@@ -9,16 +9,6 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     }
   }
 
-  class ScopeNode extends NodeBase {
-    constructor() {
-      super();
-      this.type = 'scope';
-    }
-
-    toSVGElement(visitor) {
-      visitor.visitScope(this);
-    }
-  }
   class ShapeNode extends NodeBase {
     constructor(shape, state) {
       super();
@@ -96,7 +86,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
           renderer.drawShape = function (shape) {
             if (recorder.active) {
-              recorder.addNode(
+              recorder.items.push(
                 new ShapeNode(shape, recorder.p5._svgCaptureState())
               );
             }
@@ -117,7 +107,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           renderer.background = (...args) => {
             if (recorder.active) {
               const c = recorder.p5.color(...args);
-              recorder.addNode(new BackgroundNode(c));
+              recorder.items.push(new BackgroundNode(c));
             }
             return original.apply(renderer, args);
           };
@@ -135,7 +125,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
           renderer.clear = (...args) => {
             if (recorder.active) {
-              recorder.addNode(new ClearNode());
+              recorder.items.push(new ClearNode());
             }
             return original.apply(renderer, args);
           };
@@ -245,12 +235,6 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       this.svgElement.appendChild(el);
     }
 
-    visitScope(scope) {
-      for (const child of scope.children) {
-        child.toSVGElement(this);
-      }
-    }
-
     addBackground(item) {
       const fillStr = this.colorToSVG(item.color);
 
@@ -313,8 +297,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     constructor(pInst) {
       this.p5 = pInst;
       this.active = false;
-      this.root = new ScopeNode();
-      this.scopeStack = [this.root];
+      this.items = [];
       this.tStack = new TransformStack();
       this.restores = [];
       this._isTransforming = false;
@@ -322,8 +305,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
     start() {
       this.active = true;
-      this.root = new ScopeNode();
-      this.scopeStack = [this.root];
+      this.items = [];
       this.restores = [];
       this._interceptTransforms();
       const renderer = this.p5._renderer;
@@ -345,11 +327,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       }
       this.restores = [];
     }
-    addNode(node) {
-      this.scopeStack[
-        this.scopeStack.length - 1
-      ].add(node);
-    }
+
     _interceptTransforms() {
       const p = this.p5;
       const renderer = p._renderer;
@@ -357,18 +335,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       const transformHandlers = {
         push: () => {
           this.tStack.push();
-          const scope = new ScopeNode();
-          this.scopeStack[
-            this.scopeStack.length - 1
-          ].add(scope);
-
-          this.scopeStack.push(scope);
         },
         pop: () => {
           this.tStack.pop();
-          if (this.scopeStack.length > 1) {
-            this.scopeStack.pop();
-          }
         },
         translate: (args) => {
           this.tStack.translate(args[0] || 0, args[1] || 0);
@@ -421,7 +390,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     }
 
     getRecord() {
-      return this.root;
+      return this.items;
     }
   }
 
@@ -442,14 +411,14 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     return recorder.getRecord();
   };
 
-  fn.getSVG = function (record) {
-    const visitor = new SVGVisitor(this);
-    record.toSVGElement(visitor);
-    return visitor.buildSVG();
-  };
-
   fn.saveSVG = function (record, filename = 'drawing.svg') {
-    const svg = this.getSVG(record);
+    // Save the SVG record to a file
+    const visitor = new SVGVisitor(this);
+    for (const node of record) {
+      node.toSVGElement(visitor);
+    }
+
+    const svg = visitor.buildSVG();
 
     const blob = new Blob(
       [svg],
