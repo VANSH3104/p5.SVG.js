@@ -25,3 +25,6 @@ coverage/
 # temporary files
 *.tmp
 *.temp
+
+# test artifacts
+test/visual/actual-screenshots/
