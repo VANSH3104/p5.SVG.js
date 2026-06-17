@@ -150,13 +150,14 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
   fn._svgCaptureState = function () {
     const recorder = this._activeRecorder;
+    const states = this._renderer.states;
     return {
       transform: recorder ? new DOMMatrix(
         recorder.tStack.current
       ) : new DOMMatrix(),
 
-      fill: this._renderer.states.fillColor,
-      stroke: this._renderer.states.strokeColor,
+      fill: states.fillSet ? states.fillColor : states._cachedFillStyle,
+      stroke: states.strokeSet ? states.strokeColor : states._cachedStrokeStyle,
       strokeWeight: this._renderer.states.strokeWeight
     };
   };
