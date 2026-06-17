@@ -8,7 +8,11 @@
   },
   "scripts": {
     "build": "rollup -c rollup.config.js",
-    "test": "vitest run"
+    "test": "vitest run --project unit-tests",
+    "test:visual": "vitest run --project visual-tests",
+    "test:visual:update": "vitest run --project visual-tests --update",
+    "test:all": "vitest run",
+    "report": "node test/visual/report/generate-report.js"
   },
   "author": "",
   "license": "MIT",
@@ -16,6 +20,7 @@
     "@rollup/plugin-terser": "^0.4.4",
     "@vitest/browser": "^4.1.8",
     "@vitest/browser-webdriverio": "^4.1.8",
+    "pixelmatch": "^7.2.0",
     "rollup": "^4.41.1",
     "vitest": "^4.1.8",
     "webdriverio": "^9.0.7"
