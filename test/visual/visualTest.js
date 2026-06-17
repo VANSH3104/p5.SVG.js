@@ -388,6 +388,7 @@ export function visualTest(
         });
         URL.revokeObjectURL(url);
 
+        myp5.resetMatrix();
         myp5.clear();
         myp5.drawingContext.drawImage(img, 0, 0, myp5.width, myp5.height);
 
