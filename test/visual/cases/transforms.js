@@ -7,11 +7,11 @@ import { visualSuite, visualTest } from '../visualTest.js';
 visualSuite('Transformations', () => {
 
   // ── Setup shared across transform tests ────────────────────────────────────
-  // White background, black fill, black stroke, weight 1 — consistent baseline.
+  // Grey background, white fill, black stroke, weight 1 — consistent baseline.
   function setup(p) {
     p.createCanvas(200, 200);
-    p.background(255);
-    p.fill(0);
+    p.background(200);
+    p.fill(255);
     p.stroke(0);
     p.strokeWeight(1);
   }
