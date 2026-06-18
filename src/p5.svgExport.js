@@ -181,6 +181,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       this.svgElement.setAttribute('width', this.width);
       this.svgElement.setAttribute('height', this.height);
       this.svgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`);
+      
+      // For path tracking
+      this.currentPathElement = null;
     }
 
     _createElement(tagName, attrs = {}) {
@@ -272,6 +275,127 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       }
     }
 
+    // ============ ADDED PRIMITIVE VISITOR METHODS ============
+    
+    // Path primitives
+    visitAnchor(anchor) {
+      const vertex = anchor.getEndVertex();
+      const pathEl = this._createElement('path', {
+        d: `M ${vertex.position.x} ${vertex.position.y}`
+      });
+      this._applyStyle(pathEl);
+      this._appendShapeElement(pathEl);
+      this.currentPathElement = pathEl;
+    }
+
+    visitLineSegment(lineSegment) {
+      if (!this.currentPathElement) return;
+      let d = this.currentPathElement.getAttribute('d') || '';
+      if (lineSegment.isClosing) {
+        d += ' Z';
+      } else {
+        const vertex = lineSegment.getEndVertex();
+        d += ` L ${vertex.position.x} ${vertex.position.y}`;
+      }
+      this.currentPathElement.setAttribute('d', d);
+    }
+
+    visitBezierSegment(bezierSegment) {
+      if (!this.currentPathElement) return;
+      let d = this.currentPathElement.getAttribute('d') || '';
+      const [v1, v2, v3] = bezierSegment.vertices;
+      if (bezierSegment.order === 2) {
+        d += ` Q ${v1.position.x} ${v1.position.y} ${v2.position.x} ${v2.position.y}`;
+      } else if (bezierSegment.order === 3) {
+        d += ` C ${v1.position.x} ${v1.position.y} ${v2.position.x} ${v2.position.y} ${v3.position.x} ${v3.position.y}`;
+      }
+      this.currentPathElement.setAttribute('d', d);
+    }
+
+    visitSplineSegment(splineSegment) {
+      if (!this.currentPathElement) return;
+      const shape = splineSegment._shape;
+      let d = this.currentPathElement.getAttribute('d') || '';
+
+      if (
+        splineSegment._splineProperties.ends === this.p5.EXCLUDE &&
+        !splineSegment._comesAfterSegment
+      ) {
+        const startVertex = splineSegment._firstInterpolatedVertex;
+        d += ` M ${startVertex.position.x} ${startVertex.position.y}`;
+      }
+
+      const arrayVertices = splineSegment.getControlPoints().map(
+        v => shape.vertexToArray(v)
+      );
+      const bezierArrays = shape.catmullRomToBezier(
+        arrayVertices,
+        splineSegment._splineProperties.tightness
+      ).map(arr => arr.map(vertArr => shape.arrayToVertex(vertArr)));
+
+      for (const array of bezierArrays) {
+        const points = array.flatMap(vert => [vert.position.x, vert.position.y]);
+        d += ` C ${points[0]} ${points[1]} ${points[2]} ${points[3]} ${points[4]} ${points[5]}`;
+      }
+      this.currentPathElement.setAttribute('d', d);
+    }
+
+    // Arc primitive
+    visitArcPrimitive(arc) {
+      const centerX = arc.x + arc.w / 2;
+      const centerY = arc.y + arc.h / 2;
+      const radiusX = arc.w / 2;
+      const radiusY = arc.h / 2;
+
+      const delta = arc.stop - arc.start;
+      const isFullCircle = Math.abs(delta % (2 * Math.PI)) < 0.00001 &&
+        Math.abs(delta) > 0.00001;
+
+      if (isFullCircle) {
+        if (radiusX === radiusY) {
+          const circle = this._createElement('circle', {
+            cx: centerX,
+            cy: centerY,
+            r: radiusX,
+          });
+          this._applyStyle(circle);
+          this._appendShapeElement(circle);
+        } else {
+          const ellipseEl = this._createElement('ellipse', {
+            cx: centerX,
+            cy: centerY,
+            rx: radiusX,
+            ry: radiusY,
+          });
+          this._applyStyle(ellipseEl);
+          this._appendShapeElement(ellipseEl);
+        }
+        return;
+      }
+
+      const startX = centerX + radiusX * Math.cos(arc.start);
+      const startY = centerY + radiusY * Math.sin(arc.start);
+      const endX = centerX + radiusX * Math.cos(arc.stop);
+      const endY = centerY + radiusY * Math.sin(arc.stop);
+
+      const largeArcFlag = Math.abs(delta) % (2 * Math.PI) > Math.PI ? 1 : 0;
+      const sweepFlag = delta > 0 ? 1 : 0;
+
+      let d = `M ${startX} ${startY} A ${radiusX} ${radiusY} 0 ${largeArcFlag} ${sweepFlag} ${endX} ${endY}`;
+
+      const mode = arc.mode || 'pie';
+      if (mode === 'pie') {
+        d += ` L ${centerX} ${centerY} Z`;
+      } else if (mode === 'chord') {
+        d += ' Z';
+      }
+
+      const pathEl = this._createElement('path', { d });
+      this._applyStyle(pathEl);
+      this._appendShapeElement(pathEl);
+    }
+
+    // Existing ellipse primitive (already had this)
     visitEllipsePrimitive(ellipse) {
       const cx = ellipse.x + ellipse.w / 2;
       const cy = ellipse.y + ellipse.h / 2;
@@ -292,13 +416,159 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           cy: cy,
           rx: rx,
           ry: ry,
-          fill: 'black'
         });
         this._applyStyle(ellipseEl);
         this._appendShapeElement(ellipseEl);
       }
     }
 
+    // Rect primitive with rounded corners
+    visitRectPrimitive(rect) {
+      const x = rect.x;
+      const y = rect.y;
+      const w = rect.w;
+      const h = rect.h;
+      let tl = rect.tl;
+      let tr = rect.tr;
+      let br = rect.br;
+      let bl = rect.bl;
+
+      const attrs = {
+        x: x,
+        y: y,
+        width: w,
+        height: h
+      };
+
+      if (typeof tl !== 'undefined') {
+        if (typeof tr === 'undefined') tr = tl;
+        if (typeof br === 'undefined') br = tr;
+        if (typeof bl === 'undefined') bl = br;
+
+        if (tl === tr && tl === br && tl === bl) {
+          attrs.rx = tl;
+          attrs.ry = tl;
+          const rectEl = this._createElement('rect', attrs);
+          this._applyStyle(rectEl);
+          this._appendShapeElement(rectEl);
+        } else {
+          const r_tl = Math.max(0, tl);
+          const r_tr = Math.max(0, tr);
+          const r_br = Math.max(0, br);
+          const r_bl = Math.max(0, bl);
+          
+          let d = `M ${x + r_tl} ${y} ` +
+                  `L ${x + w - r_tr} ${y} ` +
+                  `A ${r_tr} ${r_tr} 0 0 1 ${x + w} ${y + r_tr} ` +
+                  `L ${x + w} ${y + h - r_br} ` +
+                  `A ${r_br} ${r_br} 0 0 1 ${x + w - r_br} ${y + h} ` +
+                  `L ${x + r_bl} ${y + h} ` +
+                  `A ${r_bl} ${r_bl} 0 0 1 ${x} ${y + h - r_bl} ` +
+                  `L ${x} ${y + r_tl} ` +
+                  `A ${r_tl} ${r_tl} 0 0 1 ${x + r_tl} ${y} Z`;
+                  
+          const pathEl = this._createElement('path', { d });
+          this._applyStyle(pathEl);
+          this._appendShapeElement(pathEl);
+        }
+      } else {
+        const rectEl = this._createElement('rect', attrs);
+        this._applyStyle(rectEl);
+        this._appendShapeElement(rectEl);
+      }
+    }
+
+    // Point primitive
+    visitPoint(point) {
+      const { x, y } = point.vertices[0].position;
+      const line = this._createElement('line', {
+        x1: x,
+        y1: y,
+        x2: x + 0.0001,
+        y2: y
+      });
+      this._applyStyle(line);
+      line.setAttribute('stroke-linecap', 'round');
+      this._appendShapeElement(line);
+    }
+
+    // Line primitive
+    visitLine(line) {
+      const { x: x0, y: y0 } = line.vertices[0].position;
+      const { x: x1, y: y1 } = line.vertices[1].position;
+      const lineEl = this._createElement('line', {
+        x1: x0,
+        y1: y0,
+        x2: x1,
+        y2: y1
+      });
+      this._applyStyle(lineEl);
+      this._appendShapeElement(lineEl);
+    }
+
+    // Triangle primitive
+    visitTriangle(triangle) {
+      const [v0, v1, v2] = triangle.vertices;
+      const points = `${v0.position.x},${v0.position.y} ${v1.position.x},${v1.position.y} ${v2.position.x},${v2.position.y}`;
+      const triangleEl = this._createElement('polygon', { points });
+      this._applyStyle(triangleEl);
+      this._appendShapeElement(triangleEl);
+    }
+
+    // Quad primitive
+    visitQuad(quad) {
+      const [v0, v1, v2, v3] = quad.vertices;
+      const points = `${v0.position.x},${v0.position.y} ${v1.position.x},${v1.position.y} ${v2.position.x},${v2.position.y} ${v3.position.x},${v3.position.y}`;
+      const quadEl = this._createElement('polygon', { points });
+      this._applyStyle(quadEl);
+      this._appendShapeElement(quadEl);
+    }
+
+    // Tessellation primitives
+    visitTriangleFan(triangleFan) {
+      if (triangleFan.vertices.length < 3) return;
+      const [v0, ...rest] = triangleFan.vertices;
+      let d = '';
+      for (let i = 0; i < rest.length - 1; i++) {
+        const v1 = rest[i];
+        const v2 = rest[i + 1];
+        d += `M ${v0.position.x} ${v0.position.y} L ${v1.position.x} ${v1.position.y} L ${v2.position.x} ${v2.position.y} Z `;
+      }
+      const pathEl = this._createElement('path', { d: d.trim() });
+      this._applyStyle(pathEl);
+      this._appendShapeElement(pathEl);
+    }
+
+    visitTriangleStrip(triangleStrip) {
+      if (triangleStrip.vertices.length < 3) return;
+      let d = '';
+      for (let i = 0; i < triangleStrip.vertices.length - 2; i++) {
+        const v0 = triangleStrip.vertices[i];
+        const v1 = triangleStrip.vertices[i + 1];
+        const v2 = triangleStrip.vertices[i + 2];
+        d += `M ${v0.position.x} ${v0.position.y} L ${v1.position.x} ${v1.position.y} L ${v2.position.x} ${v2.position.y} Z `;
+      }
+      const pathEl = this._createElement('path', { d: d.trim() });
+      this._applyStyle(pathEl);
+      this._appendShapeElement(pathEl);
+    }
+
+    visitQuadStrip(quadStrip) {
+      if (quadStrip.vertices.length < 4) return;
+      let d = '';
+      for (let i = 0; i < quadStrip.vertices.length - 3; i += 2) {
+        const v0 = quadStrip.vertices[i];
+        const v1 = quadStrip.vertices[i + 1];
+        const v2 = quadStrip.vertices[i + 2];
+        const v3 = quadStrip.vertices[i + 3];
+        d += `M ${v0.position.x} ${v0.position.y} L ${v1.position.x} ${v1.position.y} L ${v3.position.x} ${v3.position.y} L ${v2.position.x} ${v2.position.y} Z `;
+      }
+      const pathEl = this._createElement('path', { d: d.trim() });
+      this._applyStyle(pathEl);
+      this._appendShapeElement(pathEl);
+    }
+
+    // ============ END ADDED PRIMITIVES ============
 
     buildSVG() {
       const serializer = new XMLSerializer();
