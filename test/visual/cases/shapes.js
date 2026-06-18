@@ -37,67 +37,67 @@ visualSuite('SVG Shapes', () => {
   });
 
   // ── rect
-  // visualTest('rect', async (p, screenshot) => {
-  //   setup(p);
-  //   const record = p.buildShape(() => {
-  //     p.rect(40, 50, 120, 80);
-  //   });
-  //   await screenshot(p.getSVG(record));
-  // });
+  visualTest('rect', async (p, screenshot) => {
+    setup(p);
+    const record = p.buildShape(() => {
+      p.rect(40, 50, 120, 80);
+    });
+    await screenshot(p.getSVG(record));
+  });
 
   // ── square
-  // visualTest('square', async (p, screenshot) => {
-  //   setup(p);
-  //   const record = p.buildShape(() => {
-  //     p.square(45, 45, 110);
-  //   });
-  //   await screenshot(p.getSVG(record));
-  // });
+  visualTest('square', async (p, screenshot) => {
+    setup(p);
+    const record = p.buildShape(() => {
+      p.square(45, 45, 110);
+    });
+    await screenshot(p.getSVG(record));
+  });
 
   // ── line
-  // visualTest('line', async (p, screenshot) => {
-  //   setup(p);
-  //   const record = p.buildShape(() => {
-  //     p.line(30, 40, 170, 160);
-  //   });
-  //   await screenshot(p.getSVG(record));
-  // });
+  visualTest('line', async (p, screenshot) => {
+    setup(p);
+    const record = p.buildShape(() => {
+      p.line(30, 40, 170, 160);
+    });
+    await screenshot(p.getSVG(record));
+  });
 
   // ── point
-  // visualTest('point', async (p, screenshot) => {
-  //   setup(p);
-  //   const record = p.buildShape(() => {
-  //     p.point(105, 95);
-  //   });
-  //   await screenshot(p.getSVG(record));
-  // });
+  visualTest('point', async (p, screenshot) => {
+    setup(p);
+    const record = p.buildShape(() => {
+      p.point(105, 95);
+    });
+    await screenshot(p.getSVG(record));
+  });
 
   // ── triangle
-  // visualTest('triangle', async (p, screenshot) => {
-  //   setup(p);
-  //   const record = p.buildShape(() => {
-  //     p.triangle(105, 40, 45, 160, 155, 160);
-  //   });
-  //   await screenshot(p.getSVG(record));
-  // });
+  visualTest('triangle', async (p, screenshot) => {
+    setup(p);
+    const record = p.buildShape(() => {
+      p.triangle(105, 40, 45, 160, 155, 160);
+    });
+    await screenshot(p.getSVG(record));
+  });
 
   // ── quad
-  // visualTest('quad', async (p, screenshot) => {
-  //   setup(p);
-  //   const record = p.buildShape(() => {
-  //     p.quad(35, 35, 165, 55, 145, 165, 55, 145);
-  //   });
-  //   await screenshot(p.getSVG(record));
-  // });
+  visualTest('quad', async (p, screenshot) => {
+    setup(p);
+    const record = p.buildShape(() => {
+      p.quad(35, 35, 165, 55, 145, 165, 55, 145);
+    });
+    await screenshot(p.getSVG(record));
+  });
 
   // ── arc
-  // visualTest('arc', async (p, screenshot) => {
-  //   setup(p);
-  //   const record = p.buildShape(() => {
-  //     p.arc(95, 95, 130, 130, 0, p.PI + p.HALF_PI);
-  //   });
-  //   await screenshot(p.getSVG(record));
-  // });
+  visualTest('arc', async (p, screenshot) => {
+    setup(p);
+    const record = p.buildShape(() => {
+      p.arc(95, 95, 130, 130, 0, p.PI + p.HALF_PI);
+    });
+    await screenshot(p.getSVG(record));
+  });
 
   // ── Multiple Shapes ────────────────────────────────────────────────────────
 
@@ -119,6 +119,102 @@ visualSuite('SVG Shapes', () => {
       p.rect(40, 40, 100, 100);
       p.circle(110, 110, 80);
       p.line(20, 50, 180, 150);
+    });
+    await screenshot(p.getSVG(record));
+  });
+
+  // ── Custom Paths and Tessellations ─────────────────────────────────────────
+
+  visualTest('custom path - vertices', async (p, screenshot) => {
+    setup(p);
+    const record = p.buildShape(() => {
+      p.beginShape();
+      p.vertex(30, 20);
+      p.vertex(85, 20);
+      p.vertex(85, 75);
+      p.vertex(30, 75);
+      p.endShape(p.CLOSE);
+    });
+    await screenshot(p.getSVG(record));
+  });
+
+  visualTest('custom path - bezier curve', async (p, screenshot) => {
+    setup(p);
+    const record = p.buildShape(() => {
+      p.bezierOrder(3);
+      p.beginShape();
+      p.vertex(30, 20);
+      p.bezierVertex(80, 0);
+      p.bezierVertex(80, 75);
+      p.bezierVertex(30, 75);
+      p.bezierVertex(50, 80);
+      p.bezierVertex(60, 25);
+      p.bezierVertex(30, 20);
+      p.endShape();
+    });
+    await screenshot(p.getSVG(record));
+  });
+
+  visualTest('custom path - curves', async (p, screenshot) => {
+    setup(p);
+    const record = p.buildShape(() => {
+      p.beginShape();
+      p.splineVertex(40, 40);
+      p.splineVertex(40, 40);
+      p.splineVertex(80, 60);
+      p.splineVertex(120, 100);
+      p.splineVertex(160, 40);
+      p.splineVertex(160, 40);
+      p.endShape();
+    });
+    await screenshot(p.getSVG(record));
+  });
+
+  visualTest('triangle fan', async (p, screenshot) => {
+    setup(p);
+    const record = p.buildShape(() => {
+      p.beginShape(p.TRIANGLE_FAN);
+      p.vertex(100, 100);
+      p.vertex(100, 40);
+      p.vertex(150, 60);
+      p.vertex(160, 110);
+      p.vertex(130, 150);
+      p.vertex(80, 140);
+      p.vertex(50, 90);
+      p.endShape();
+    });
+    await screenshot(p.getSVG(record));
+  });
+
+  visualTest('triangle strip', async (p, screenshot) => {
+    setup(p);
+    const record = p.buildShape(() => {
+      p.beginShape(p.TRIANGLE_STRIP);
+      p.vertex(30, 75);
+      p.vertex(40, 20);
+      p.vertex(50, 75);
+      p.vertex(60, 20);
+      p.vertex(70, 75);
+      p.vertex(80, 20);
+      p.vertex(90, 75);
+      p.endShape();
+    });
+    await screenshot(p.getSVG(record));
+  });
+
+  visualTest('quad strip', async (p, screenshot) => {
+    setup(p);
+    const record = p.buildShape(() => {
+      p.beginShape(p.QUAD_STRIP);
+      p.vertex(30, 80);
+      p.vertex(30, 20);
+      p.vertex(70, 80);
+      p.vertex(70, 20);
+      p.vertex(110, 80);
+      p.vertex(110, 20);
+      p.vertex(150, 80);
+      p.vertex(150, 20);
+      p.endShape();
     });
     await screenshot(p.getSVG(record));
   });
