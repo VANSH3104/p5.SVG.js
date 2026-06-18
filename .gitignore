@@ -28,3 +28,4 @@ coverage/
 
 # test artifacts
 test/visual/actual-screenshots/
+test/visual/report/index.html
