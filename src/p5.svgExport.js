@@ -99,6 +99,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
               recorder.addNode(
                 new ShapeNode(shape, recorder.p5._svgCaptureState())
               );
+              if (p5.Shape) {
+                renderer._currentShape = new p5.Shape(renderer.getCommonVertexProperties());
+              }
             }
             return original.call(renderer, shape);
           };
@@ -156,8 +159,8 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         recorder.tStack.current
       ) : new DOMMatrix(),
 
-      fill: states.fillSet ? states.fillColor : states._cachedFillStyle,
-      stroke: states.strokeSet ? states.strokeColor : states._cachedStrokeStyle,
+      fill: states.fillColor === null ? null : (states.fillColor || states._cachedFillStyle),
+      stroke: states.strokeColor === null ? null : (states.strokeColor || states._cachedStrokeStyle),
       strokeWeight: this._renderer.states.strokeWeight
     };
   };
@@ -305,9 +308,14 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       let d = this.currentPathElement.getAttribute('d') || '';
       const [v1, v2, v3] = bezierSegment.vertices;
       if (bezierSegment.order === 2) {
-        d += ` Q ${v1.position.x} ${v1.position.y} ${v2.position.x} ${v2.position.y}`;
+        const p1 = v1?.position || { x: 0, y: 0 };
+        const p2 = v2?.position || p1;
+        d += ` Q ${p1.x} ${p1.y} ${p2.x} ${p2.y}`;
       } else if (bezierSegment.order === 3) {
-        d += ` C ${v1.position.x} ${v1.position.y} ${v2.position.x} ${v2.position.y} ${v3.position.x} ${v3.position.y}`;
+        const p1 = v1?.position || { x: 0, y: 0 };
+        const p2 = v2?.position || p1;
+        const p3 = v3?.position || p2;
+        d += ` C ${p1.x} ${p1.y} ${p2.x} ${p2.y} ${p3.x} ${p3.y}`;
       }
       this.currentPathElement.setAttribute('d', d);
     }
@@ -322,7 +330,10 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         !splineSegment._comesAfterSegment
       ) {
         const startVertex = splineSegment._firstInterpolatedVertex;
-        d += ` M ${startVertex.position.x} ${startVertex.position.y}`;
+        const startPos = startVertex?.position || { x: 0, y: 0 };
+        const sx = startPos.x !== undefined ? startPos.x : (startPos[0] !== undefined ? startPos[0] : (startPos.values ? startPos.values[0] : 0));
+        const sy = startPos.y !== undefined ? startPos.y : (startPos[1] !== undefined ? startPos[1] : (startPos.values ? startPos.values[1] : 0));
+        d += ` M ${sx} ${sy}`;
       }
 
       const arrayVertices = splineSegment.getControlPoints().map(
@@ -331,10 +342,10 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       const bezierArrays = shape.catmullRomToBezier(
         arrayVertices,
         splineSegment._splineProperties.tightness
-      ).map(arr => arr.map(vertArr => shape.arrayToVertex(vertArr)));
+      );
 
       for (const array of bezierArrays) {
-        const points = array.flatMap(vert => [vert.position.x, vert.position.y]);
+        const points = array.flatMap(pt => [pt[0], pt[1]]);
         d += ` C ${points[0]} ${points[1]} ${points[2]} ${points[3]} ${points[4]} ${points[5]}`;
       }
       this.currentPathElement.setAttribute('d', d);
@@ -383,7 +394,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
       let d = `M ${startX} ${startY} A ${radiusX} ${radiusY} 0 ${largeArcFlag} ${sweepFlag} ${endX} ${endY}`;
 
-      const mode = arc.mode || 'pie';
+      const mode = (arc.mode || 'open').toLowerCase();
       if (mode === 'pie') {
         d += ` L ${centerX} ${centerY} Z`;
       } else if (mode === 'chord') {
