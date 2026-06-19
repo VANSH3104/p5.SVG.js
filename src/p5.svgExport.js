@@ -159,8 +159,8 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         recorder.tStack.current
       ) : new DOMMatrix(),
 
-      fill: states.fillSet ? states.fillColor : states._cachedFillStyle,
-      stroke: states.strokeSet ? states.strokeColor : states._cachedStrokeStyle,
+      fill: states.fillColor === null ? null : (states.fillColor || states._cachedFillStyle),
+      stroke: states.strokeColor === null ? null : (states.strokeColor || states._cachedStrokeStyle),
       strokeWeight: this._renderer.states.strokeWeight
     };
   };
