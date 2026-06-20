@@ -239,4 +239,256 @@ suite('SVGVisitor', function() {
     assert.include(svgStr, '<rect');
     assert.include(svgStr, 'fill="rgba(255,0,0,1)"');
   });
+
+  test('visitAnchor and path segments should generate valid path data', function() {
+    const pInst = createPInst();
+    const visitor = createVisitor(pInst);
+    visitor.currentState = { fill: 'none', stroke: 'black', strokeWeight: 1 };
+
+    // visitAnchor
+    visitor.visitAnchor({
+      getEndVertex() { return { position: { x: 10, y: 20 } }; }
+    });
+    assert.strictEqual(visitor.currentPathElement.getAttribute('d'), 'M 10 20');
+
+    // visitLineSegment (not closing)
+    visitor.visitLineSegment({
+      isClosing: false,
+      getEndVertex() { return { position: { x: 30, y: 40 } }; }
+    });
+    assert.strictEqual(visitor.currentPathElement.getAttribute('d'), 'M 10 20 L 30 40');
+
+    // visitLineSegment (closing)
+    visitor.visitLineSegment({
+      isClosing: true
+    });
+    assert.strictEqual(visitor.currentPathElement.getAttribute('d'), 'M 10 20 L 30 40 Z');
+  });
+
+  test('visitBezierSegment should append quadratic or cubic Bezier curves to path', function() {
+    const pInst = createPInst();
+    const visitor = createVisitor(pInst);
+    visitor.currentState = { fill: 'none', stroke: 'black', strokeWeight: 1 };
+
+    // Set up path
+    visitor.visitAnchor({
+      getEndVertex() { return { position: { x: 10, y: 10 } }; }
+    });
+
+    // visitBezierSegment (order 2)
+    visitor.visitBezierSegment({
+      order: 2,
+      vertices: [
+        { position: { x: 20, y: 20 } },
+        { position: { x: 30, y: 10 } }
+      ]
+    });
+    assert.strictEqual(visitor.currentPathElement.getAttribute('d'), 'M 10 10 Q 20 20 30 10');
+
+    // visitBezierSegment (order 3)
+    visitor.visitBezierSegment({
+      order: 3,
+      vertices: [
+        { position: { x: 40, y: 0 } },
+        { position: { x: 50, y: 20 } },
+        { position: { x: 60, y: 10 } }
+      ]
+    });
+    assert.strictEqual(visitor.currentPathElement.getAttribute('d'), 'M 10 10 Q 20 20 30 10 C 40 0 50 20 60 10');
+  });
+
+  test('visitSplineSegment should append Catmull-Rom spline curves to path', function() {
+    const pInst = createPInst();
+    pInst.EXCLUDE = 'exclude';
+    const visitor = createVisitor(pInst);
+    visitor.currentState = { fill: 'none', stroke: 'black', strokeWeight: 1 };
+
+    // Set up path
+    visitor.visitAnchor({
+      getEndVertex() { return { position: { x: 10, y: 10 } }; }
+    });
+
+    const mockShape = {
+      vertexToArray(v) { return [v.x, v.y]; },
+      catmullRomToBezier(arr, tightness) {
+        return [[ [20, 20], [30, 20], [40, 10] ]];
+      }
+    };
+
+    visitor.visitSplineSegment({
+      _shape: mockShape,
+      _comesAfterSegment: true,
+      _splineProperties: {
+        ends: 'exclude',
+        tightness: 0.5
+      },
+      getControlPoints() {
+        return [{ x: 10, y: 10 }, { x: 40, y: 10 }];
+      }
+    });
+
+    assert.strictEqual(visitor.currentPathElement.getAttribute('d'), 'M 10 10 C 20 20 30 20 40 10');
+  });
+
+  test('visitArcPrimitive should generate correct arc paths and elements', function() {
+    const pInst = createPInst();
+    const visitor = createVisitor(pInst);
+    visitor.currentState = { fill: 'red', stroke: 'none', strokeWeight: 0 };
+
+    // Test full circle
+    visitor.visitArcPrimitive({
+      x: 0, y: 0, w: 100, h: 100,
+      start: 0, stop: 2 * Math.PI
+    });
+    const fullCircleEl = visitor.svgElement.lastChild;
+    assert.strictEqual(fullCircleEl.tagName.toLowerCase(), 'circle');
+    assert.strictEqual(fullCircleEl.getAttribute('cx'), '50');
+    assert.strictEqual(fullCircleEl.getAttribute('r'), '50');
+
+    // Test arc segment (pie mode)
+    visitor.visitArcPrimitive({
+      x: 0, y: 0, w: 100, h: 100,
+      start: 0, stop: Math.PI,
+      mode: 'pie'
+    });
+    const pieEl = visitor.svgElement.lastChild;
+    assert.strictEqual(pieEl.tagName.toLowerCase(), 'path');
+    const pathD = pieEl.getAttribute('d');
+    assert.include(pathD, 'M 100 50 A 50 50 0 0 1 0');
+    assert.include(pathD, 'L 50 50 Z');
+  });
+
+  test('visitRectPrimitive should handle standard and rounded rectangles', function() {
+    const pInst = createPInst();
+    const visitor = createVisitor(pInst);
+    visitor.currentState = { fill: 'blue', stroke: 'none', strokeWeight: 0 };
+
+    // Standard rect
+    visitor.visitRectPrimitive({
+      x: 10, y: 20, w: 100, h: 200
+    });
+    const rectEl = visitor.svgElement.lastChild;
+    assert.strictEqual(rectEl.tagName.toLowerCase(), 'rect');
+    assert.strictEqual(rectEl.getAttribute('x'), '10');
+    assert.strictEqual(rectEl.getAttribute('width'), '100');
+
+    // Rounded rect (single radius)
+    visitor.visitRectPrimitive({
+      x: 10, y: 20, w: 100, h: 200,
+      tl: 10, tr: 10, br: 10, bl: 10
+    });
+    const roundedRectEl = visitor.svgElement.lastChild;
+    assert.strictEqual(roundedRectEl.tagName.toLowerCase(), 'rect');
+    assert.strictEqual(roundedRectEl.getAttribute('rx'), '10');
+
+    // Rounded rect (different radii - path generated)
+    visitor.visitRectPrimitive({
+      x: 10, y: 20, w: 100, h: 200,
+      tl: 5, tr: 10, br: 15, bl: 20
+    });
+    const roundedPathEl = visitor.svgElement.lastChild;
+    assert.strictEqual(roundedPathEl.tagName.toLowerCase(), 'path');
+    assert.include(roundedPathEl.getAttribute('d'), 'M 15 20');
+  });
+
+  test('visitPoint and visitLine should generate correct SVG line elements', function() {
+    const pInst = createPInst();
+    const visitor = createVisitor(pInst);
+    visitor.currentState = { fill: 'none', stroke: 'black', strokeWeight: 2 };
+
+    // Point
+    visitor.visitPoint({
+      vertices: [{ position: { x: 50, y: 60 } }]
+    });
+    const pointEl = visitor.svgElement.lastChild;
+    assert.strictEqual(pointEl.tagName.toLowerCase(), 'line');
+    assert.strictEqual(pointEl.getAttribute('x1'), '50');
+    assert.strictEqual(pointEl.getAttribute('stroke-linecap'), 'round');
+
+    // Line
+    visitor.visitLine({
+      vertices: [
+        { position: { x: 10, y: 20 } },
+        { position: { x: 30, y: 40 } }
+      ]
+    });
+    const lineEl = visitor.svgElement.lastChild;
+    assert.strictEqual(lineEl.tagName.toLowerCase(), 'line');
+    assert.strictEqual(lineEl.getAttribute('x1'), '10');
+    assert.strictEqual(lineEl.getAttribute('x2'), '30');
+  });
+
+  test('visitTriangle and visitQuad should generate valid polygon tags', function() {
+    const pInst = createPInst();
+    const visitor = createVisitor(pInst);
+    visitor.currentState = { fill: 'red', stroke: 'black', strokeWeight: 1 };
+
+    // Triangle
+    visitor.visitTriangle({
+      vertices: [
+        { position: { x: 10, y: 10 } },
+        { position: { x: 20, y: 30 } },
+        { position: { x: 30, y: 10 } }
+      ]
+    });
+    const triEl = visitor.svgElement.lastChild;
+    assert.strictEqual(triEl.tagName.toLowerCase(), 'polygon');
+    assert.strictEqual(triEl.getAttribute('points'), '10,10 20,30 30,10');
+
+    // Quad
+    visitor.visitQuad({
+      vertices: [
+        { position: { x: 10, y: 10 } },
+        { position: { x: 30, y: 10 } },
+        { position: { x: 30, y: 30 } },
+        { position: { x: 10, y: 30 } }
+      ]
+    });
+    const quadEl = visitor.svgElement.lastChild;
+    assert.strictEqual(quadEl.tagName.toLowerCase(), 'polygon');
+    assert.strictEqual(quadEl.getAttribute('points'), '10,10 30,10 30,30 10,30');
+  });
+
+  test('tessellation primitives should generate valid path elements', function() {
+    const pInst = createPInst();
+    const visitor = createVisitor(pInst);
+    visitor.currentState = { fill: 'red', stroke: 'none', strokeWeight: 0 };
+
+    // TriangleFan
+    visitor.visitTriangleFan({
+      vertices: [
+        { position: { x: 0, y: 0 } },
+        { position: { x: 10, y: 20 } },
+        { position: { x: 20, y: 10 } }
+      ]
+    });
+    const fanEl = visitor.svgElement.lastChild;
+    assert.strictEqual(fanEl.tagName.toLowerCase(), 'path');
+    assert.strictEqual(fanEl.getAttribute('d'), 'M 0 0 L 10 20 L 20 10 Z');
+
+    // TriangleStrip
+    visitor.visitTriangleStrip({
+      vertices: [
+        { position: { x: 0, y: 0 } },
+        { position: { x: 10, y: 20 } },
+        { position: { x: 20, y: 10 } }
+      ]
+    });
+    const stripEl = visitor.svgElement.lastChild;
+    assert.strictEqual(stripEl.tagName.toLowerCase(), 'path');
+    assert.strictEqual(stripEl.getAttribute('d'), 'M 0 0 L 10 20 L 20 10 Z');
+
+    // QuadStrip
+    visitor.visitQuadStrip({
+      vertices: [
+        { position: { x: 0, y: 0 } },
+        { position: { x: 0, y: 10 } },
+        { position: { x: 10, y: 0 } },
+        { position: { x: 10, y: 10 } }
+      ]
+    });
+    const quadStripEl = visitor.svgElement.lastChild;
+    assert.strictEqual(quadStripEl.tagName.toLowerCase(), 'path');
+    assert.strictEqual(quadStripEl.getAttribute('d'), 'M 0 0 L 0 10 L 10 10 L 10 0 Z');
+  });
 });
