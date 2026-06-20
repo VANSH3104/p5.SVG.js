@@ -18,7 +18,7 @@ visualSuite('Clears', () => {
       // Draw red shape first
       p.fill(255, 0, 0);
       p.noStroke();
-      p.rect(50, 50, 100, 100);
+      p.rect(40, 60, 120, 80);
       
       // Clear it
       p.clear();
@@ -33,14 +33,14 @@ visualSuite('Clears', () => {
       // Draw red shape
       p.fill(255, 0, 0);
       p.noStroke();
-      p.rect(20, 20, 100, 100);
+      p.rect(20, 30, 120, 80);
       
       // Clear screen
       p.clear();
       
       // Draw blue shape with transparency
       p.fill(0, 0, 255, 128);
-      p.rect(80, 80, 100, 100);
+      p.rect(70, 90, 110, 70);
     });
     await screenshot(p.getSVG(record));
   });
@@ -52,17 +52,17 @@ visualSuite('Clears', () => {
       // Draw red shape
       p.fill(255, 0, 0);
       p.noStroke();
-      p.rect(20, 20, 100, 100);
+      p.rect(20, 30, 120, 80);
       
       // Translate canvas
-      p.translate(50, 50);
+      p.translate(40, 60);
       
       // Clear screen
       p.clear();
       
-      // Draw blue shape - should still be translated by (50, 50)
+      // Draw blue shape - should still be translated by (40, 60)
       p.fill(0, 0, 255);
-      p.rect(0, 0, 100, 100);
+      p.rect(0, 0, 110, 70);
     });
     await screenshot(p.getSVG(record));
   });
@@ -74,7 +74,7 @@ visualSuite('Clears', () => {
       // Draw shape
       p.fill(255, 0, 0);
       p.noStroke();
-      p.rect(20, 20, 100, 100);
+      p.rect(20, 30, 120, 80);
       
       // Clear
       p.clear();
@@ -91,9 +91,9 @@ visualSuite('Clears', () => {
     const record = p.buildShape(() => {
       // Background and shape
       p.background(255, 0, 0); // Red background
-      p.translate(50, 50);
+      p.translate(40, 60);
       p.fill(0, 255, 0);
-      p.rect(0, 0, 100, 100);
+      p.rect(0, 0, 110, 70);
       
       // Clear everything
       p.clear();
