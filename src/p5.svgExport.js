@@ -203,18 +203,40 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       }
 
       if (typeof color === 'string') {
+        const normalized = color.replace(/\s+/g, '');
+        if (
+          normalized === 'rgba(0,0,0,0)' ||
+          normalized.endsWith(',0)') ||
+          (normalized.startsWith('#') &&
+            normalized.endsWith('00') &&
+            (normalized.length === 5 || normalized.length === 9))
+        ) {
+          return 'none';
+        }
         return color;
       }
 
       if (typeof color.toString === 'function') {
-
-        const str = color.toString();
-
-        if (str === 'rgba(0,0,0,0)') {
-          return 'none';
+        let str;
+        if (color.isColor || (color.constructor && color.constructor.name === 'Color')) {
+          str = color.toString('rgba');
+        } else {
+          str = color.toString();
         }
 
-        return str;
+        if (typeof str === 'string') {
+          const normalized = str.replace(/\s+/g, '');
+          if (
+            normalized === 'rgba(0,0,0,0)' ||
+            normalized.endsWith(',0)') ||
+            (normalized.startsWith('#') &&
+              normalized.endsWith('00') &&
+              (normalized.length === 5 || normalized.length === 9))
+          ) {
+            return 'none';
+          }
+          return str;
+        }
       }
 
       return 'none';
@@ -351,7 +373,6 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       this.currentPathElement.setAttribute('d', d);
     }
 
-    // Arc primitive
     visitArcPrimitive(arc) {
       const centerX = arc.x + arc.w / 2;
       const centerY = arc.y + arc.h / 2;
@@ -392,18 +413,48 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       const largeArcFlag = Math.abs(delta) % (2 * Math.PI) > Math.PI ? 1 : 0;
       const sweepFlag = delta > 0 ? 1 : 0;
 
-      let d = `M ${startX} ${startY} A ${radiusX} ${radiusY} 0 ${largeArcFlag} ${sweepFlag} ${endX} ${endY}`;
+      const openPath = `M ${startX} ${startY} A ${radiusX} ${radiusY} 0 ${largeArcFlag} ${sweepFlag} ${endX} ${endY}`;
 
-      const mode = (arc.mode || 'open').toLowerCase();
+      let dFill = openPath;
+      let dStroke = openPath;
+
+      const mode = arc.mode ? arc.mode.toLowerCase() : undefined;
       if (mode === 'pie') {
-        d += ` L ${centerX} ${centerY} Z`;
+        dFill = dStroke = `${openPath} L ${centerX} ${centerY} Z`;
       } else if (mode === 'chord') {
-        d += ' Z';
+        dFill = dStroke = `${openPath} Z`;
+      } else if (mode === 'open') {
+        dFill = dStroke = openPath;
+      } else {
+        // default / undefined: fill is pie, stroke is open
+        dFill = `${openPath} L ${centerX} ${centerY} Z`;
+        dStroke = openPath;
       }
 
-      const pathEl = this._createElement('path', { d });
-      this._applyStyle(pathEl);
-      this._appendShapeElement(pathEl);
+      if (dFill === dStroke) {
+        const pathEl = this._createElement('path', { d: dFill });
+        this._applyStyle(pathEl);
+        this._appendShapeElement(pathEl);
+      } else {
+        const state = this.currentState;
+        const fillStr = this.colorToSVG(state?.fill);
+        const strokeStr = this.colorToSVG(state?.stroke);
+        const hasFill = fillStr !== 'none';
+        const hasStroke = strokeStr !== 'none' && state?.strokeWeight != null;
+
+        if (hasFill) {
+          const fillEl = this._createElement('path', { d: dFill });
+          this._applyStyle(fillEl);
+          fillEl.setAttribute('stroke', 'none');
+          this._appendShapeElement(fillEl);
+        }
+        if (hasStroke) {
+          const strokeEl = this._createElement('path', { d: dStroke });
+          this._applyStyle(strokeEl);
+          strokeEl.setAttribute('fill', 'none');
+          this._appendShapeElement(strokeEl);
+        }
+      }
     }
 
     // Existing ellipse primitive (already had this)
