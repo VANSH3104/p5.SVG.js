@@ -1,5 +1,8 @@
 # p5.svg-export / p5.svg-import
 
+> [!WARNING]
+> This repository is currently in active development. APIs and behavior are subject to change.
+
 Native SVG export and import support for p5.js using the Shape system and PrimitiveVisitor architecture.
 
 This project is being developed as a GSoC 2026 project and focuses on building a retained rendering pipeline for exporting and importing p5.js sketches as scalable SVG documents.
