@@ -776,6 +776,27 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     return recorder.getRecord();
   };
 
+  fn.beginRecord = function () {
+    if (this._activeRecorder) {
+      console.warn('beginRecord() called while already recording. Stopping previous recording.');
+      this._activeRecorder.stop();
+    }
+    const recorder = new ShapeRecorder(this);
+    this._activeRecorder = recorder;
+    recorder.start();
+  };
+
+  fn.endRecord = function () {
+    const recorder = this._activeRecorder;
+    if (!recorder) {
+      console.warn('endRecord() called without a matching beginRecord().');
+      return null;
+    }
+    recorder.stop();
+    this._activeRecorder = null;
+    return recorder.getRecord();
+  };
+
   fn.getSVG = function (record) {
     const visitor = new SVGVisitor(this);
     record.toSVGElement(visitor);
