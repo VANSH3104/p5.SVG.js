@@ -1,10 +1,14 @@
 {
-  "name": "p5.svg",
-  "version": "0.0.0",
+  "name": "p5.svg-io",
+  "version": "0.1.0",
   "description": "Native SVG export and Import for p5.js using Shape system",
   "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "exports": {
-    "./export": "./dist/p5.svg-export.min.js"
+    "./export": "./dist/p5.svgExport.min.js"
   },
   "scripts": {
     "build": "rollup -c rollup.config.js",
