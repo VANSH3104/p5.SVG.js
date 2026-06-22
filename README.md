@@ -9,6 +9,47 @@ This project is being developed as a GSoC 2026 project and focuses on building a
 
 ---
 
+## Quick Start
+
+Include the p5.js library and the `p5.svgExport.min.js` addon in your project's `index.html` file:
+
+```html
+<!-- index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>p5.SVG Export Example</title>
+  <!-- Load p5.js -->
+  <script src="https://raw.esm.sh/pr/p5@02bcb7e/lib/p5.min.js"></script>
+  <!-- Load p5.SVG Export Addon -->
+  <script src="https://cdn.jsdelivr.net/npm/p5.svg-io@0.1.0/dist/p5.svgExport.min.js"></script>
+</head>
+<body>
+  <script src="sketch.js"></script>
+</body>
+</html>
+```
+
+Next, write your p5.js drawing code. Be sure to call `buildShape` and other addon functions inside `setup()`, `draw()`, or event callbacks once the p5.js canvas has been initialized:
+
+```js
+// sketch.js
+function setup() {
+  createCanvas(400, 400);
+
+  // Record drawing commands using buildShape
+  const drawing = buildShape(() => {
+    circle(100, 100, 50);
+    rect(200, 100, 80, 60);
+  });
+
+  // Save the recorded drawing as an SVG
+  saveSVG(drawing, 'my-art.svg');
+}
+```
+
+---
+
 ## Guide: SVG Recording Options
 
 `p5.SVG.js` provides two distinct ways to capture your drawing instructions as SVGs:
@@ -75,47 +116,6 @@ function setup() {
 - **Mismatched Pairs:** Each call to `beginRecord()` should have a corresponding `endRecord()`. Calling `endRecord()` without first starting a recording will log a warning and return `null`.
 - **No Nesting:** Do not call `beginRecord()` while a recording is already active. Doing so will automatically stop and discard the previous recording, issuing a console warning.
 - **Record Nodes:** `endRecord()` returns a recorded tree structure. You must pass this object to `saveSVG(record, filename)` or `getSVG(record)` to generate/download the SVG.
-
----
-
-## Quickstart Installation
-
-Include the p5.js library and the `p5.svgExport.min.js` addon in your project's `index.html` file:
-
-```html
-<!-- index.html -->
-<!DOCTYPE html>
-<html>
-<head>
-  <title>p5.SVG Export Example</title>
-  <!-- Load p5.js -->
-  <script src="https://raw.esm.sh/pr/p5@02bcb7e/lib/p5.min.js"></script>
-  <!-- Load p5.SVG Export Addon -->
-  <script src="dist/p5.svgExport.min.js"></script>
-</head>
-<body>
-  <script src="sketch.js"></script>
-</body>
-</html>
-```
-
-Next, write your p5.js drawing code. Be sure to call `buildShape` and other addon functions inside `setup()`, `draw()`, or event callbacks once the p5.js canvas has been initialized:
-
-```js
-// sketch.js
-function setup() {
-  createCanvas(400, 400);
-
-  // Record drawing commands using buildShape
-  const drawing = buildShape(() => {
-    circle(100, 100, 50);
-    rect(200, 100, 80, 60);
-  });
-
-  // Save the recorded drawing as an SVG
-  saveSVG(drawing, 'my-art.svg');
-}
-```
 
 ---
 
