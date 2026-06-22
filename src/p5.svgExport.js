@@ -206,7 +206,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         const normalized = color.replace(/\s+/g, '');
         if (
           normalized === 'rgba(0,0,0,0)' ||
-          normalized.endsWith(',0)') ||
+          ((normalized.startsWith('rgba(') || normalized.startsWith('hsla(')) && normalized.endsWith(',0)')) ||
           (normalized.startsWith('#') &&
             normalized.endsWith('00') &&
             (normalized.length === 5 || normalized.length === 9))
@@ -228,7 +228,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           const normalized = str.replace(/\s+/g, '');
           if (
             normalized === 'rgba(0,0,0,0)' ||
-            normalized.endsWith(',0)') ||
+            ((normalized.startsWith('rgba(') || normalized.startsWith('hsla(')) && normalized.endsWith(',0)')) ||
             (normalized.startsWith('#') &&
               normalized.endsWith('00') &&
               (normalized.length === 5 || normalized.length === 9))

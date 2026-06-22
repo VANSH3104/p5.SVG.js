@@ -12,7 +12,7 @@ visualSuite('Backgrounds', () => {
     const record = p.buildShape(() => {
       p.background(255, 200, 100); // yellowish
       p.fill(0, 0, 255); // blue
-      p.rect(50, 50, 100, 100);
+      p.rect(40, 60, 120, 80);
     });
     await screenshot(p.getSVG(record));
   });
@@ -30,7 +30,7 @@ visualSuite('Backgrounds', () => {
   visualTest('transform and background', async (p, screenshot) => {
     p.createCanvas(200, 200);
     const record = p.buildShape(() => {
-      p.translate(100, 100);
+      p.translate(90, 110);
       p.scale(2);
       p.background(200, 100, 100); // reddish
       p.fill(255);
@@ -44,10 +44,10 @@ visualSuite('Backgrounds', () => {
     p.createCanvas(200, 200);
     const record = p.buildShape(() => {
       p.fill(255, 0, 0); // red
-      p.rect(20, 20, 100, 100);
+      p.rect(20, 30, 120, 80);
       p.background(0, 255, 0, 128); // semi-transparent green background
       p.fill(0, 0, 255); // blue
-      p.rect(80, 80, 100, 100);
+      p.rect(70, 90, 110, 70);
     });
     await screenshot(p.getSVG(record));
   });
@@ -57,11 +57,11 @@ visualSuite('Backgrounds', () => {
     p.createCanvas(200, 200);
     const record = p.buildShape(() => {
       p.fill(255, 0, 0); // red
-      p.rect(20, 20, 100, 100);
-      p.translate(50, 50);
+      p.rect(20, 30, 120, 80);
+      p.translate(40, 60);
       p.background(0, 255, 255); // cyan background
       p.fill(0, 0, 255); // blue
-      p.rect(0, 0, 100, 100);
+      p.rect(0, 0, 110, 70);
     });
     await screenshot(p.getSVG(record));
   });

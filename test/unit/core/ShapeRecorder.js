@@ -196,4 +196,29 @@ suite('ShapeRecorder', function() {
     assert.strictEqual(pInst.pop, origPop);
     assert.strictEqual(pInst.translate, origTranslate);
   });
+
+  test('should cleanup intercepted methods on endRecord', function() {
+    const pInst = createPInst();
+
+    // Preserve original references for verification
+    const origDrawShape = pInst._renderer.drawShape;
+    const origPush = pInst.push;
+    const origPop = pInst.pop;
+    const origTranslate = pInst.translate;
+
+    pInst.beginRecord();
+    // During recording, methods should be wrapped
+    assert.notStrictEqual(pInst._renderer.drawShape, origDrawShape);
+    assert.notStrictEqual(pInst.push, origPush);
+    assert.notStrictEqual(pInst.pop, origPop);
+    assert.notStrictEqual(pInst.translate, origTranslate);
+
+    pInst.endRecord();
+
+    // After endRecord, functions should be restored
+    assert.strictEqual(pInst._renderer.drawShape, origDrawShape);
+    assert.strictEqual(pInst.push, origPush);
+    assert.strictEqual(pInst.pop, origPop);
+    assert.strictEqual(pInst.translate, origTranslate);
+  });
 });
