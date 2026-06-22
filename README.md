@@ -1,11 +1,13 @@
 # p5.svg-export / p5.svg-import
 
 > [!WARNING]
-> This repository is currently in active development. APIs and behavior are subject to change.
+> This repository is currently in active development. API names, design, and behavior are subject to change.
 
 Native SVG export and import support for p5.js using the Shape system and PrimitiveVisitor architecture.
 
 This project is being developed as a GSoC 2026 project and focuses on building a retained rendering pipeline for exporting and importing p5.js sketches as scalable SVG documents.
+
+Try it live in the [p5.js Web Editor](https://editor.p5js.org/vanshkabra05/full/45caLrfVy).
 
 ---
 
@@ -116,6 +118,7 @@ function setup() {
 - **Mismatched Pairs:** Each call to `beginRecord()` should have a corresponding `endRecord()`. Calling `endRecord()` without first starting a recording will log a warning and return `null`.
 - **No Nesting:** Do not call `beginRecord()` while a recording is already active. Doing so will automatically stop and discard the previous recording, issuing a console warning.
 - **Record Nodes:** `endRecord()` returns a recorded tree structure. You must pass this object to `saveSVG(record, filename)` or `getSVG(record)` to generate/download the SVG.
+- **No Hidden Line Detection:** This addon does not perform hidden line detection. To remove obscured lines/shapes in the exported SVG, you will need to process the file using an external tool.
 
 ---
 
