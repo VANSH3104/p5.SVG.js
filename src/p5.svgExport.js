@@ -159,8 +159,8 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         recorder.tStack.current
       ) : new DOMMatrix(),
 
-      fill: states.fillColor === null ? null : (states.fillColor || states._cachedFillStyle),
-      stroke: states.strokeColor === null ? null : (states.strokeColor || states._cachedStrokeStyle),
+      fill: states.fillColor,
+      stroke: states.strokeColor,
       strokeWeight: this._renderer.states.strokeWeight
     };
   };
@@ -201,95 +201,16 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       if (!color) {
         return 'none';
       }
+      let alpha = color._getAlpha();
 
-      // If it's a string, try to parse it
-      if (typeof color === 'string') {
-        // Already a hex color
-        if (color.startsWith('#')) {
-          return color;
-        }
-
-        // Parse rgba/rgb
-        const rgbaMatch = color.match(/rgba?\(\s*([\d.]+)%?\s*,\s*([\d.]+)%?\s*,\s*([\d.]+)%?(?:\s*,\s*([\d.]+))?\s*\)/i);
-        if (rgbaMatch) {
-          let r, g, b, a = 1;
-
-          if (color.includes('%')) {
-            r = Math.round(parseFloat(rgbaMatch[1]) * 255 / 100);
-            g = Math.round(parseFloat(rgbaMatch[2]) * 255 / 100);
-            b = Math.round(parseFloat(rgbaMatch[3]) * 255 / 100);
-          } else {
-            r = Math.round(parseFloat(rgbaMatch[1]));
-            g = Math.round(parseFloat(rgbaMatch[2]));
-            b = Math.round(parseFloat(rgbaMatch[3]));
-          }
-          a = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1;
-
-          return this._colorToHex(r, g, b, a);
-        }
-
-        return color;
+      // p5 can return either 0-1 or 0-255
+      if (alpha > 1) {
+        alpha /= 255;
       }
 
-      // Handle p5.js Color objects or objects with toString()
-      if (color && typeof color === 'object') {
-        if (color.isColor || (color.constructor && color.constructor.name === 'Color') || color.levels) {
-          try {
-            const levels = color.levels;
-            if (levels && levels.length >= 3) {
-              const r = Math.round(levels[0]);
-              const g = Math.round(levels[1]);
-              const b = Math.round(levels[2]);
-              const a = levels[3] !== undefined ? levels[3] / 255 : 1;
+      this._currentOpacity = alpha;
 
-              return this._colorToHex(r, g, b, a);
-            }
-          } catch (e) {
-            // Fall through
-          }
-        }
-        if (typeof color.toString === 'function') {
-          let str;
-          if (color.isColor || (color.constructor && color.constructor.name === 'Color') || color.levels) {
-            str = color.toString('rgba');
-          } else {
-            str = color.toString();
-          }
-          if (typeof str === 'string') {
-            return this.colorToSVG(str);
-          }
-        }
-      }
-
-      return 'none';
-    }
-
-    _colorToHex(r, g, b, a = 1) {
-      // Clamp values
-      r = Math.max(0, Math.min(255, r));
-      g = Math.max(0, Math.min(255, g));
-      b = Math.max(0, Math.min(255, b));
-      a = Math.max(0, Math.min(1, a));
-
-      // Store opacity for separate attribute
-      if (a < 1) {
-        this._currentOpacity = Math.round(a * 1000) / 1000;
-      } else {
-        this._currentOpacity = 1;
-      }
-
-      // Fully transparent
-      if (a === 0) {
-        return 'none';
-      }
-
-      // Convert to hex
-      const hex = '#' + [r, g, b].map(c => {
-        const hex = c.toString(16);
-        return hex.length === 1 ? '0' + hex : hex;
-      }).join('');
-
-      return hex;
+      return color.toString('#rrggbb');
     }
 
     _applyStyle(el) {
@@ -310,16 +231,12 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       el.setAttribute('fill', fill);
       el.setAttribute('stroke', stroke);
 
-      // Apply opacity if not fully opaque
-      if (fillOpacity !== undefined && fillOpacity < 1) {
-        if (fill !== 'none') {
-          el.setAttribute('fill-opacity', fillOpacity.toFixed(4));
-        }
+      if (fillOpacity < 1 && fill !== 'none') {
+        el.setAttribute('fill-opacity', fillOpacity.toFixed(4));
       }
-      if (strokeOpacity !== undefined && strokeOpacity < 1) {
-        if (stroke !== 'none') {
-          el.setAttribute('stroke-opacity', strokeOpacity.toFixed(4));
-        }
+
+      if (strokeOpacity < 1 && stroke !== 'none') {
+        el.setAttribute('stroke-opacity', strokeOpacity.toFixed(4));
       }
 
       if (state.stroke && state.strokeWeight != null) {
@@ -363,10 +280,8 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         fill: fillStr
       });
 
-      if (opacity !== undefined && opacity < 1) {
-        if (fillStr !== 'none') {
-          rect.setAttribute('fill-opacity', opacity.toFixed(4));
-        }
+      if (opacity < 1 && fillStr !== 'none') {
+        rect.setAttribute('fill-opacity', opacity.toFixed(4));
       }
 
       this.svgElement.appendChild(rect);
