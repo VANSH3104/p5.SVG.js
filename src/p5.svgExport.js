@@ -199,19 +199,15 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
     colorToSVG(color) {
       if (!color) {
+        this._currentOpacity = 1;
         return 'none';
       }
-      let alpha = color._getAlpha();
+      const [, , , alpha] = color._getRGBA([255, 255, 255, 255]);
 
-      // p5 can return either 0-1 or 0-255
-      if (alpha > 1) {
-        alpha /= 255;
+      this._currentOpacity = alpha / 255;
+
+          return color.toString('#rrggbb');
       }
-
-      this._currentOpacity = alpha;
-
-      return color.toString('#rrggbb');
-    }
 
     _applyStyle(el) {
       const state = this.currentState;
