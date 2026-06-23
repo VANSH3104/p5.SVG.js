@@ -159,8 +159,8 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         recorder.tStack.current
       ) : new DOMMatrix(),
 
-      fill: states.fillColor === null ? null : (states.fillColor || states._cachedFillStyle),
-      stroke: states.strokeColor === null ? null : (states.strokeColor || states._cachedStrokeStyle),
+      fill: states.fillColor,
+      stroke: states.strokeColor,
       strokeWeight: this._renderer.states.strokeWeight
     };
   };
@@ -199,48 +199,15 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
     colorToSVG(color) {
       if (!color) {
+        this._currentOpacity = 1;
         return 'none';
       }
+      const [, , , alpha] = color._getRGBA([255, 255, 255, 255]);
 
-      if (typeof color === 'string') {
-        const normalized = color.replace(/\s+/g, '');
-        if (
-          normalized === 'rgba(0,0,0,0)' ||
-          ((normalized.startsWith('rgba(') || normalized.startsWith('hsla(')) && normalized.endsWith(',0)')) ||
-          (normalized.startsWith('#') &&
-            normalized.endsWith('00') &&
-            (normalized.length === 5 || normalized.length === 9))
-        ) {
-          return 'none';
-        }
-        return color;
+      this._currentOpacity = alpha / 255;
+
+          return color.toString('#rrggbb');
       }
-
-      if (typeof color.toString === 'function') {
-        let str;
-        if (color.isColor || (color.constructor && color.constructor.name === 'Color')) {
-          str = color.toString('rgba');
-        } else {
-          str = color.toString();
-        }
-
-        if (typeof str === 'string') {
-          const normalized = str.replace(/\s+/g, '');
-          if (
-            normalized === 'rgba(0,0,0,0)' ||
-            ((normalized.startsWith('rgba(') || normalized.startsWith('hsla(')) && normalized.endsWith(',0)')) ||
-            (normalized.startsWith('#') &&
-              normalized.endsWith('00') &&
-              (normalized.length === 5 || normalized.length === 9))
-          ) {
-            return 'none';
-          }
-          return str;
-        }
-      }
-
-      return 'none';
-    }
 
     _applyStyle(el) {
       const state = this.currentState;
@@ -249,8 +216,24 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         return;
       }
 
-      el.setAttribute('fill', this.colorToSVG(state.fill));
-      el.setAttribute('stroke', this.colorToSVG(state.stroke));
+      this._currentOpacity = 1;
+      const fill = this.colorToSVG(state.fill);
+      const fillOpacity = this._currentOpacity;
+
+      this._currentOpacity = 1;
+      const stroke = this.colorToSVG(state.stroke);
+      const strokeOpacity = this._currentOpacity;
+
+      el.setAttribute('fill', fill);
+      el.setAttribute('stroke', stroke);
+
+      if (fillOpacity < 1 && fill !== 'none') {
+        el.setAttribute('fill-opacity', fillOpacity.toFixed(4));
+      }
+
+      if (strokeOpacity < 1 && stroke !== 'none') {
+        el.setAttribute('stroke-opacity', strokeOpacity.toFixed(4));
+      }
 
       if (state.stroke && state.strokeWeight != null) {
         el.setAttribute('stroke-width', state.strokeWeight);
@@ -281,7 +264,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     }
 
     addBackground(item) {
+      this._currentOpacity = 1;
       const fillStr = this.colorToSVG(item.color);
+      const opacity = this._currentOpacity;
 
       const rect = this._createElement('rect', {
         x: 0,
@@ -290,6 +275,10 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         height: this.height,
         fill: fillStr
       });
+
+      if (opacity < 1 && fillStr !== 'none') {
+        rect.setAttribute('fill-opacity', opacity.toFixed(4));
+      }
 
       this.svgElement.appendChild(rect);
     }
