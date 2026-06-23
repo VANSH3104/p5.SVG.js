@@ -1,5 +1,19 @@
 import { SVGExportAddon } from '../../../src/p5.svgExport.js';
 
+function createMockColor(r = 255, g = 0, b = 0, a = 255, hexString = '#ff0000') {
+  return {
+    _getRGBA(mode) {
+      return [r, g, b, a];
+    },
+    toString(format) {
+      if (format === '#rrggbb') {
+        return hexString;
+      }
+      return `rgba(${r},${g},${b},${a / 255})`;
+    }
+  };
+}
+
 // Setup mock p5.js environment for addon initialization
 class MockPrimitiveVisitor {
   constructor() {}
@@ -19,8 +33,8 @@ function createPInst() {
     height: 600,
     _renderer: {
       states: {
-        fillColor: 'red',
-        strokeColor: 'black',
+        fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+        strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
         strokeWeight: 1
       },
       drawShape(shape) { return shape; },
@@ -33,12 +47,27 @@ function createPInst() {
       clear() {}
     },
     color(...args) {
-      return {
-        levels: [255, 0, 0, 255],
-        toString() {
-          return `rgba(${args.join(',') || '255,0,0,255'})`;
-        }
-      };
+      if (args[0] && typeof args[0]._getRGBA === 'function') {
+        return args[0];
+      }
+      let r = 255, g = 0, b = 0, a = 255;
+      let hexString = '#ff0000';
+      if (typeof args[0] === 'string') {
+        hexString = args[0];
+        if (hexString === 'red') { r = 255; g = 0; b = 0; hexString = '#ff0000'; }
+        else if (hexString === 'green') { r = 0; g = 128; b = 0; hexString = '#008000'; }
+        else if (hexString === 'blue') { r = 0; g = 0; b = 255; hexString = '#0000ff'; }
+        else if (hexString === 'yellow') { r = 255; g = 255; b = 0; hexString = '#ffff00'; }
+        else if (hexString === 'black') { r = 0; g = 0; b = 0; hexString = '#000000'; }
+        else if (hexString === 'rgba(255,0,0,1)') { r = 255; g = 0; b = 0; a = 255; hexString = '#ff0000'; }
+      } else if (typeof args[0] === 'number') {
+        r = args[0];
+        g = args[1] !== undefined ? args[1] : r;
+        b = args[2] !== undefined ? args[2] : r;
+        a = args[3] !== undefined ? args[3] : 255;
+        hexString = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+      }
+      return createMockColor(r, g, b, a, hexString);
     },
     push() {},
     pop() {},
@@ -80,21 +109,15 @@ suite('SVGVisitor', function() {
     assert.strictEqual(visitor.colorToSVG(null), 'none');
     assert.strictEqual(visitor.colorToSVG(undefined), 'none');
 
-    // String input -> unchanged
-    assert.strictEqual(visitor.colorToSVG('blue'), 'blue');
-    assert.strictEqual(visitor.colorToSVG('#ff0000'), '#ff0000');
+    // Color object with full opacity
+    const blueColor = createMockColor(0, 0, 255, 255, '#0000ff');
+    assert.strictEqual(visitor.colorToSVG(blueColor), '#0000ff');
+    assert.strictEqual(visitor._currentOpacity, 1);
 
-    // Color object with levels/toString
-    const colorObj = {
-      toString() { return 'rgb(0,255,0)'; }
-    };
-    assert.strictEqual(visitor.colorToSVG(colorObj), 'rgb(0,255,0)');
-
-    // Transparent rgba -> 'none'
-    const transparentColorObj = {
-      toString() { return 'rgba(0,0,0,0)'; }
-    };
-    assert.strictEqual(visitor.colorToSVG(transparentColorObj), 'none');
+    // Color object with partial opacity
+    const halfAlphaRed = createMockColor(255, 0, 0, 127.5, '#ff0000');
+    assert.strictEqual(visitor.colorToSVG(halfAlphaRed), '#ff0000');
+    assert.closeTo(visitor._currentOpacity, 0.5, 0.01);
   });
 
   test('_createElement should create SVG elements with namespaces and attributes', function() {
@@ -120,14 +143,14 @@ suite('SVGVisitor', function() {
 
     const el = visitor._createElement('rect');
     visitor.currentState = {
-      fill: 'red',
-      stroke: 'blue',
+      fill: createMockColor(255, 0, 0, 255, '#ff0000'),
+      stroke: createMockColor(0, 0, 255, 255, '#0000ff'),
       strokeWeight: 3
     };
 
     visitor._applyStyle(el);
-    assert.strictEqual(el.getAttribute('fill'), 'red');
-    assert.strictEqual(el.getAttribute('stroke'), 'blue');
+    assert.strictEqual(el.getAttribute('fill'), '#ff0000');
+    assert.strictEqual(el.getAttribute('stroke'), '#0000ff');
     assert.strictEqual(el.getAttribute('stroke-width'), '3');
   });
 
@@ -162,8 +185,8 @@ suite('SVGVisitor', function() {
     const visitor = createVisitor(pInst);
 
     visitor.currentState = {
-      fill: 'yellow',
-      stroke: 'none',
+      fill: createMockColor(255, 255, 0, 255, '#ffff00'),
+      stroke: null,
       strokeWeight: 0,
       transform: new DOMMatrix()
     };
@@ -181,7 +204,7 @@ suite('SVGVisitor', function() {
     assert.strictEqual(circleEl.getAttribute('cx'), '30'); // 10 + 40/2
     assert.strictEqual(circleEl.getAttribute('cy'), '40'); // 20 + 40/2
     assert.strictEqual(circleEl.getAttribute('r'), '20');  // 40/2
-    assert.strictEqual(circleEl.getAttribute('fill'), 'yellow');
+    assert.strictEqual(circleEl.getAttribute('fill'), '#ffff00');
 
     // Width != Height -> Ellipse
     visitor.visitEllipsePrimitive({
@@ -204,13 +227,13 @@ suite('SVGVisitor', function() {
     const visitor = createVisitor(pInst);
 
     visitor.addBackground({
-      color: 'green'
+      color: createMockColor(0, 128, 0, 255, '#008000')
     });
 
     assert.strictEqual(visitor.svgElement.children.length, 1);
     const bgRect = visitor.svgElement.firstChild;
     assert.strictEqual(bgRect.tagName.toLowerCase(), 'rect');
-    assert.strictEqual(bgRect.getAttribute('fill'), 'green');
+    assert.strictEqual(bgRect.getAttribute('fill'), '#008000');
     assert.strictEqual(bgRect.getAttribute('width'), '600');
     assert.strictEqual(bgRect.getAttribute('height'), '600');
 
@@ -229,7 +252,7 @@ suite('SVGVisitor', function() {
     const visitor = createVisitor(pInst);
 
     visitor.addBackground({
-      color: 'rgba(255,0,0,1)'
+      color: createMockColor(255, 0, 0, 255, '#ff0000')
     });
 
     const svgStr = visitor.buildSVG();
@@ -237,13 +260,17 @@ suite('SVGVisitor', function() {
     assert.include(svgStr, 'height="600"');
     assert.include(svgStr, 'viewBox="0 0 600 600"');
     assert.include(svgStr, '<rect');
-    assert.include(svgStr, 'fill="rgba(255,0,0,1)"');
+    assert.include(svgStr, 'fill="#ff0000"');
   });
 
   test('visitAnchor and path segments should generate valid path data', function() {
     const pInst = createPInst();
     const visitor = createVisitor(pInst);
-    visitor.currentState = { fill: 'none', stroke: 'black', strokeWeight: 1 };
+    visitor.currentState = {
+      fill: null,
+      stroke: createMockColor(0, 0, 0, 255, '#000000'),
+      strokeWeight: 1
+    };
 
     // visitAnchor
     visitor.visitAnchor({
@@ -268,7 +295,11 @@ suite('SVGVisitor', function() {
   test('visitBezierSegment should append quadratic or cubic Bezier curves to path', function() {
     const pInst = createPInst();
     const visitor = createVisitor(pInst);
-    visitor.currentState = { fill: 'none', stroke: 'black', strokeWeight: 1 };
+    visitor.currentState = {
+      fill: null,
+      stroke: createMockColor(0, 0, 0, 255, '#000000'),
+      strokeWeight: 1
+    };
 
     // Set up path
     visitor.visitAnchor({
@@ -301,7 +332,11 @@ suite('SVGVisitor', function() {
     const pInst = createPInst();
     pInst.EXCLUDE = 'exclude';
     const visitor = createVisitor(pInst);
-    visitor.currentState = { fill: 'none', stroke: 'black', strokeWeight: 1 };
+    visitor.currentState = {
+      fill: null,
+      stroke: createMockColor(0, 0, 0, 255, '#000000'),
+      strokeWeight: 1
+    };
 
     // Set up path
     visitor.visitAnchor({
@@ -333,7 +368,11 @@ suite('SVGVisitor', function() {
   test('visitArcPrimitive should generate correct arc paths and elements', function() {
     const pInst = createPInst();
     const visitor = createVisitor(pInst);
-    visitor.currentState = { fill: 'red', stroke: 'none', strokeWeight: 0 };
+    visitor.currentState = {
+      fill: createMockColor(255, 0, 0, 255, '#ff0000'),
+      stroke: null,
+      strokeWeight: 0
+    };
 
     // Test full circle
     visitor.visitArcPrimitive({
@@ -361,7 +400,11 @@ suite('SVGVisitor', function() {
   test('visitRectPrimitive should handle standard and rounded rectangles', function() {
     const pInst = createPInst();
     const visitor = createVisitor(pInst);
-    visitor.currentState = { fill: 'blue', stroke: 'none', strokeWeight: 0 };
+    visitor.currentState = {
+      fill: createMockColor(0, 0, 255, 255, '#0000ff'),
+      stroke: null,
+      strokeWeight: 0
+    };
 
     // Standard rect
     visitor.visitRectPrimitive({
@@ -394,7 +437,11 @@ suite('SVGVisitor', function() {
   test('visitPoint and visitLine should generate correct SVG line elements', function() {
     const pInst = createPInst();
     const visitor = createVisitor(pInst);
-    visitor.currentState = { fill: 'none', stroke: 'black', strokeWeight: 2 };
+    visitor.currentState = {
+      fill: null,
+      stroke: createMockColor(0, 0, 0, 255, '#000000'),
+      strokeWeight: 2
+    };
 
     // Point
     visitor.visitPoint({
@@ -421,7 +468,11 @@ suite('SVGVisitor', function() {
   test('visitTriangle and visitQuad should generate valid polygon tags', function() {
     const pInst = createPInst();
     const visitor = createVisitor(pInst);
-    visitor.currentState = { fill: 'red', stroke: 'black', strokeWeight: 1 };
+    visitor.currentState = {
+      fill: createMockColor(255, 0, 0, 255, '#ff0000'),
+      stroke: createMockColor(0, 0, 0, 255, '#000000'),
+      strokeWeight: 1
+    };
 
     // Triangle
     visitor.visitTriangle({
@@ -452,7 +503,11 @@ suite('SVGVisitor', function() {
   test('tessellation primitives should generate valid path elements', function() {
     const pInst = createPInst();
     const visitor = createVisitor(pInst);
-    visitor.currentState = { fill: 'red', stroke: 'none', strokeWeight: 0 };
+    visitor.currentState = {
+      fill: createMockColor(255, 0, 0, 255, '#ff0000'),
+      stroke: null,
+      strokeWeight: 0
+    };
 
     // TriangleFan
     visitor.visitTriangleFan({

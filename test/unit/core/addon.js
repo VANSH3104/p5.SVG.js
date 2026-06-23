@@ -1,6 +1,20 @@
 import { vi } from 'vitest';
 import { SVGExportAddon } from '../../../src/p5.svgExport.js';
 
+function createMockColor(r = 255, g = 0, b = 0, a = 255, hexString = '#ff0000') {
+  return {
+    _getRGBA(mode) {
+      return [r, g, b, a];
+    },
+    toString(format) {
+      if (format === '#rrggbb') {
+        return hexString;
+      }
+      return `rgba(${r},${g},${b},${a / 255})`;
+    }
+  };
+}
+
 suite('Addon Integration', function() {
   test('should register addon functions on fn (p5.prototype)', function() {
     const fn = {};
@@ -34,15 +48,15 @@ suite('Addon Integration', function() {
       height: 600,
       _renderer: {
         states: {
-          fillColor: 'red',
-          strokeColor: 'black',
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
           strokeWeight: 1
         },
         drawShape(shape) { return shape; },
         push() {},
         pop() {}
       },
-      color(...args) { return { toString() { return 'red'; } }; },
+      color(...args) { return createMockColor(255, 0, 0, 255, '#ff0000'); },
       push() {},
       pop() {}
     };
@@ -77,15 +91,15 @@ suite('Addon Integration', function() {
       height: 600,
       _renderer: {
         states: {
-          fillColor: 'red',
-          strokeColor: 'black',
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
           strokeWeight: 1
         },
         drawShape(shape) { return shape; },
         push() {},
         pop() {}
       },
-      color(...args) { return { toString() { return 'red'; } }; },
+      color(...args) { return createMockColor(255, 0, 0, 255, '#ff0000'); },
       push() {},
       pop() {}
     };
@@ -126,14 +140,14 @@ suite('Addon Integration', function() {
     const pInst = {
       width: 600,
       height: 600,
-      color() { return { toString() { return 'red'; } }; }
+      color() { return createMockColor(255, 0, 0, 255, '#ff0000'); }
     };
     Object.setPrototypeOf(pInst, fn);
 
     // Mock record
     const mockRecord = {
       toSVGElement(visitor) {
-        visitor.addBackground({ color: 'red' });
+        visitor.addBackground({ color: createMockColor(255, 0, 0, 255, '#ff0000') });
       }
     };
 
