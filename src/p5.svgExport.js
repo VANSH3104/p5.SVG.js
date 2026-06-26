@@ -78,6 +78,17 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     scale(x, y) {
       this.current.scaleSelf(x, y !== undefined ? y : x);
     }
+    shearX(rad) {
+      this.current.multiplySelf(
+        new DOMMatrix([1,0,Math.tan(rad),1,0,0])
+      );
+    }
+
+    shearY(rad) {
+      this.current.multiplySelf(
+        new DOMMatrix([1,Math.tan(rad),0,1,0,0])
+      );
+    }
 
     get current() {
       return this.stack[this.stack.length - 1];
@@ -676,6 +687,17 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       const p = this.p5;
       const renderer = p._renderer;
 
+      const toRadians = (angle, context) => {
+        if (
+          context === this.p5 &&
+          this.p5._angleMode &&
+          this.p5._angleMode === this.p5.DEGREES
+        ) {
+          return angle * Math.PI / 180;
+        }
+        return angle;
+      };
+
       const transformHandlers = {
         push: () => {
           this.tStack.push();
@@ -695,11 +717,23 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         translate: (args) => {
           this.tStack.translate(args[0] || 0, args[1] || 0);
         },
-        rotate: (args) => {
-          this.tStack.rotate(args[0] || 0);
+        rotate: (args, context) => {
+          this.tStack.rotate(toRadians(args[0] || 0, context));
         },
         scale: (args) => {
           this.tStack.scale(args[0] || 1, args[1]);
+        },
+        shearX: (args, context) => {
+          this.tStack.shearX(toRadians(args[0] || 0, context));
+        },
+        shearY: (args, context) => {
+          this.tStack.shearY(toRadians(args[0] || 0, context));
+        },
+        applyMatrix: (args) => {
+          const [a, b, c, d, e, f] = args;
+          this.tStack.current.multiplySelf(
+            new DOMMatrix([a, b, c, d, e, f])
+          );
         }
       };
 
@@ -711,7 +745,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           this._isTransforming = true;
           try {
             if (this.active) {
-              transformHandlers[method](args);
+              transformHandlers[method](args, context);
             }
             return origFn.apply(context, args);
           } finally {
