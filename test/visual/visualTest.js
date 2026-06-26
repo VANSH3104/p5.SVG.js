@@ -376,7 +376,14 @@ export function visualTest(
       const actual = [];
 
       // Renders an SVG string into the p5 canvas and captures it as a p5.Image.
+      // If svgString is not provided, captures the current canvas directly.
       const screenshot = async (svgString) => {
+        if (!svgString) {
+          const snap = await myp5.get();
+          snap.pixelDensity(1);
+          actual.push(snap);
+          return;
+        }
         const blob = new Blob([svgString], { type: 'image/svg+xml' });
         const url  = URL.createObjectURL(blob);
 
