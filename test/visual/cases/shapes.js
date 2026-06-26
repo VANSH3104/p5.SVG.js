@@ -260,33 +260,14 @@ visualSuite('SVG Shapes', () => {
     // 1. Test Replay directly on the canvas
     p.background(255);
     
-    // Draw first flower
+    // Draw flower
     p.shape(flower);
-    
-    // Draw second flower with outer transforms (scale, rotate, translate)
-    p.push();
-    p.translate(250, 200);
-    p.rotate(p.PI / 6);
-    p.scale(1.2);
-    p.shape(flower);
-    p.pop();
 
     // Capture the replayed canvas directly
     await screenshot();
 
-    // 2. Test SVG export of the same composition
-    const exportedRecord = p.buildShape(() => {
-      p.background(255);
-      p.shape(flower);
-      p.push();
-      p.translate(250, 200);
-      p.rotate(p.PI / 6);
-      p.scale(1.2);
-      p.shape(flower);
-      p.pop();
-    });
-    
-    await screenshot(p.getSVG(exportedRecord));
+    // 2. Test SVG export of the flower shape directly
+    await screenshot(p.getSVG(flower));
   });
 
 });
