@@ -269,5 +269,17 @@ suite('ShapeRecorder', function() {
     assert.strictEqual(replayedShapeNode.type, 'shape');
     assert.strictEqual(replayedShapeNode.shape.name, 'shapeA');
   });
-});
 
+  test('should handle buildShape called without a callback function', function() {
+    const pInst = createPInst();
+
+    // Call without arguments
+    let record;
+    assert.doesNotThrow(() => {
+      record = pInst.buildShape();
+    });
+
+    assert.strictEqual(record.type, 'scope');
+    assert.strictEqual(record.children.length, 0);
+  });
+});
