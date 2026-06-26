@@ -24,7 +24,7 @@ Include the p5.js library and the `p5.svgExport.min.js` addon in your project's 
   <!-- Load p5.js -->
   <script src="https://raw.esm.sh/pr/p5@02bcb7e/lib/p5.min.js"></script>
   <!-- Load p5.SVG Export Addon -->
-  <script src="https://cdn.jsdelivr.net/npm/p5.svg-io@0.1.1/dist/p5.svgExport.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5.svg-io@0.1.2/dist/p5.svgExport.min.js"></script>
 </head>
 <body>
   <script src="sketch.js"></script>

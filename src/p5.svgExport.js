@@ -757,7 +757,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     this._activeRecorder = recorder;
     recorder.start();
     try {
-      callback();
+      if (typeof callback === 'function') {
+        callback();
+      }
     } finally {
       recorder.stop();
       this._activeRecorder = null;
