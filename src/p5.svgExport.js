@@ -789,6 +789,12 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         },
         scale: (args) => {
           this.tStack.scale(args[0] || 1, args[1]);
+        },
+        applyMatrix: (args) => {
+          const [a, b, c, d, e, f] = args;
+          this.tStack.current.multiplySelf(
+            new DOMMatrix([a, b, c, d, e, f])
+          );
         }
       };
 
