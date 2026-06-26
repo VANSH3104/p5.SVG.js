@@ -643,12 +643,24 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
     replayScope(scope) {
       for (const child of scope.children) {
-        if (child.type === 'scope') {
-          this.replayScope(child);
-        } else if (child.type === 'shape') {
-          this.replayShape(child);
+        switch(child.type) {
+          case 'scope':
+            this.replayScope(child);
+            break;
+
+          case 'shape':
+            this.replayShape(child);
+            break;
+
+          case 'background':
+            this.replayBackground(child);
+            break;
+
+          case 'clear':
+            this.replayClear(child);
+            break;
+          }
         }
-      }
     }
 
     replayShape(shapeNode) {
@@ -657,6 +669,22 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       this.applyState(shapeNode.state);
       p._renderer.drawShape(shapeNode.shape);
       p.pop();
+    }
+
+    replayClear() {
+      this.p5.clear();
+    }
+
+    replayBackground(node) {
+      const p = this.p5;
+
+      if (!node.color) {
+        p.clear();
+        return;
+      }
+
+      const [r, g, b, a] = node.color._getRGBA([255, 255, 255, 255]);
+      p.background(r, g, b, a);
     }
 
     applyState(state) {
