@@ -129,6 +129,18 @@ export class ShapeRecorder {
       this.scopeStack.length - 1
     ].add(node);
   }
+  enterScope() {
+    const scope = new ScopeNode();
+    this.addNode(scope);
+    this.scopeStack.push(scope);
+    return scope;
+  }
+
+  leaveScope() {
+    if (this.scopeStack.length > 1) {
+      this.scopeStack.pop();
+    }
+  }
   _interceptTransforms() {
     const p = this.p5;
     const renderer = p._renderer;
@@ -136,18 +148,11 @@ export class ShapeRecorder {
     const transformHandlers = {
       push: () => {
         this.tStack.push();
-        const scope = new ScopeNode();
-        this.scopeStack[
-          this.scopeStack.length - 1
-        ].add(scope);
-
-        this.scopeStack.push(scope);
+        this.enterScope();
       },
       pop: () => {
         this.tStack.pop();
-        if (this.scopeStack.length > 1) {
-          this.scopeStack.pop();
-        }
+        this.leaveScope();
       },
       translate: (args) => {
         this.tStack.translate(args[0] || 0, args[1] || 0);
