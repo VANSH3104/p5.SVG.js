@@ -24,6 +24,10 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     return this.visitSVG(node);
                 case "g":
                     return this.visitGroup(node);
+                case "circle":
+                    return this.visitCircle(node);
+                case "ellipse":
+                    return this.visitEllipse(node);
             }
         }
         visitSVG(node) {
@@ -51,7 +55,46 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             shape.endShape();
             return shape;
         }
+      
+        visitCircle(node) {
+            const r = Number(node.getAttribute("r")) || 0;
 
+            this.addEllipse(
+                Number(node.getAttribute("cx")) || 0,
+                Number(node.getAttribute("cy")) || 0,
+                r,
+                r,
+                node
+            );
+        }
+
+        visitEllipse(node) {
+            this.addEllipse(
+                Number(node.getAttribute("cx")) || 0,
+                Number(node.getAttribute("cy")) || 0,
+                Number(node.getAttribute("rx")) || 0,
+                Number(node.getAttribute("ry")) || 0,
+                node
+            );
+        }
+
+        addEllipse(cx, cy, rx, ry, node) {
+            const shape = this.createShape(shape => {
+                shape.ellipsePrimitive(
+                    cx - rx,
+                    cy - ry,
+                    rx * 2,
+                    ry * 2
+                );
+            });
+
+            this.recorder.addNode(
+                new ShapeNode(
+                    shape,
+                    this.captureState(node)
+                )
+            );
+        }
     }
 
     // SVG IMPORT api
