@@ -1,121 +1,95 @@
 import { ShapeRecorder, ShapeNode, TransformStack } from "./p5.ShapeRecorder.js";
-class StyleStack {
-    constructor(p5) {
-        this.p5 = p5;
-        this.stack = [{
-            fill: p5.color("#ffffff"),
-            stroke: p5.color("#000000"),
-            strokeWeight: 1,
-        }];
-    }
-
-    get current() {
-        return this.stack[this.stack.length - 1];
-    }
-
-    push() {
-        const current = this.current;
-
-        this.stack.push({
-            fill: current.fill,
-            stroke: current.stroke,
-            strokeWeight: current.strokeWeight,
-            opacity: current.opacity,
-            fillOpacity: current.fillOpacity,
-            strokeOpacity: current.strokeOpacity,
-        });
-    }
-
-    pop() {
-        if (this.stack.length > 1) {
-            this.stack.pop();
-        }
-    }
-}
 
 export function SVGImportAddon(p5, fn, lifecycles) {
     class SVGImporter {
         constructor(p5){
             this.p5 = p5;
             this.recorder = new ShapeRecorder(p5);
-            this.styleStack = new StyleStack(p5);
             this.tStack = new TransformStack();
         }
         import(svgText) {
             const parser = new DOMParser();
             const doc = parser.parseFromString(svgText, "image/svg+xml");
-            this.visit(doc.documentElement);
-            console.log(doc.documentElement);
 
-            // Next step:
-            // this.visit(doc.documentElement);
+            const svg = doc.documentElement;
+
+            const host = document.createElement("div");
+            host.style.position = "absolute";
+            host.style.left = "-99999px";
+            host.style.visibility = "hidden";
+            host.style.pointerEvents = "none";
+
+            document.body.appendChild(host);
+            try {
+                host.appendChild(svg);
+                this.visit(host.firstChild);
+            } finally {
+                host.remove();
+            }
 
             return this.recorder.getRecord();
         }
         visit(node) {
+            if (!node) {
+                return;
+            }
             this.tStack.push();
-            this.styleStack.push();
             this.parseTransform(node);
-            this.parseStyle(node);
             switch (node.tagName) {
-                case "svg":
+                case "svg": {
                     this.visitSVG(node);
                     break;
-                case "g":
+                }
+                case "g": {
                     this.visitGroup(node);
                     break;
-                case "circle":
-                    this.visitCircle(node);
+                }
+                case "circle": {
+                    const style = this.parseStyle(node);
+                    this.visitCircle(node, style);
                     break;
-                case "ellipse":
-                    this.visitEllipse(node);
+                }
+                case "ellipse": {
+                    const style = this.parseStyle(node);
+                    this.visitEllipse(node, style);
                     break;
+                }
             }
-            this.styleStack.pop();
             this.tStack.pop();
         }
 
         parseStyle(node) {
-            const style = this.styleStack.current;
+            const cs = getComputedStyle(node);
 
-            const fill = node.getAttribute("fill");
-            if (fill === "none") {
-                style.fill = null;
-            } else if (fill) {
-                const color = this.p5.color(fill);
+            const opacity = Number(cs.opacity || 1);
+            const fillOpacity = Number(cs.fillOpacity || 1);
+            const strokeOpacity = Number(cs.strokeOpacity || 1);
 
-                const opacity =
-                    Number(node.getAttribute("opacity") ?? 1) *
-                    Number(node.getAttribute("fill-opacity") ?? 1);
-
-                color.setAlpha(255 * opacity);
-
-                style.fill = color;
+            let fill = null;
+            if (cs.fill !== "none") {
+                fill = this.p5.color(cs.fill);
+                fill.setAlpha(255 * opacity * fillOpacity);
             }
 
-            const stroke = node.getAttribute("stroke");
-            if (stroke === "none") {
-                style.stroke = null;
-            } else if (stroke) {
-                const color = this.p5.color(stroke);
-
-                const opacity =
-                    Number(node.getAttribute("opacity") ?? 1) *
-                    Number(node.getAttribute("stroke-opacity") ?? 1);
-
-                color.setAlpha(255 * opacity);
-
-                style.stroke = color;
+            let stroke = null;
+            if (cs.stroke !== "none") {
+                stroke = this.p5.color(cs.stroke);
+                stroke.setAlpha(255 * opacity * strokeOpacity);
             }
 
-            const weight = node.getAttribute("stroke-width");
-            if (weight) {
-                style.strokeWeight = Number(weight);
-            }
+            return {
+                fill,
+                stroke,
+                strokeWeight: parseFloat(cs.strokeWidth) || 1,
+                opacity,
+                fillOpacity,
+                strokeOpacity,
+            };
         }
 
+
         parseTransform(node) {
-            if (!node.transform) {
+            if (!node.transform?.baseVal) {
                 return;
             }
 
@@ -137,9 +111,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             }
         }
 
-        captureState(node) {
-            const style = this.styleStack.current;
-
+        captureState(style) {
             return {
                 transform: new DOMMatrix(this.tStack.current),
                 fill: style.fill,
@@ -177,7 +149,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             return shape;
         }
       
-        visitCircle(node) {
+        visitCircle(node, style) {
             const r = Number(node.getAttribute("r")) || 0;
 
             this.addEllipse(
@@ -185,21 +157,21 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 Number(node.getAttribute("cy")) || 0,
                 r,
                 r,
-                node
+                style
             );
         }
 
-        visitEllipse(node) {
+        visitEllipse(node, style) {
             this.addEllipse(
                 Number(node.getAttribute("cx")) || 0,
                 Number(node.getAttribute("cy")) || 0,
                 Number(node.getAttribute("rx")) || 0,
                 Number(node.getAttribute("ry")) || 0,
-                node
+                style
             );
         }
 
-        addEllipse(cx, cy, rx, ry, node) {
+        addEllipse(cx, cy, rx, ry, style) {
             const shape = this.createShape(shape => {
                 shape.ellipsePrimitive(
                     cx - rx,
@@ -208,12 +180,9 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     ry * 2
                 );
             });
-            const state = this.captureState(node);
+            const state = this.captureState(style);
             this.recorder.addNode(
-                new ShapeNode(
-                    shape,
-                    this.captureState(node)
-                )
+                new ShapeNode(shape, state)
             );
         }
     }
