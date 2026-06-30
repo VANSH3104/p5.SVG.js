@@ -1,4 +1,4 @@
-import { ShapeRecorder, ShapeNode } from "./p5.ShapeRecorder.js";
+import { ShapeRecorder, ShapeNode, TransformStack } from "./p5.ShapeRecorder.js";
 class StyleStack {
     constructor(p5) {
         this.p5 = p5;
@@ -39,6 +39,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             this.p5 = p5;
             this.recorder = new ShapeRecorder(p5);
             this.styleStack = new StyleStack(p5);
+            this.tStack = new TransformStack();
         }
         import(svgText) {
             const parser = new DOMParser();
@@ -52,7 +53,9 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             return this.recorder.getRecord();
         }
         visit(node) {
+            this.tStack.push();
             this.styleStack.push();
+            this.parseTransform(node);
             this.parseStyle(node);
             switch (node.tagName) {
                 case "svg":
@@ -69,6 +72,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     break;
             }
             this.styleStack.pop();
+            this.tStack.pop();
         }
 
         parseStyle(node) {
@@ -111,16 +115,33 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         parseTransform(node) {
-            return new DOMMatrix(
-                node.getAttribute("transform") ?? undefined
-            );
+            if (!node.transform) {
+                return;
+            }
+
+            const transforms = node.transform.baseVal;
+
+            for (let i = 0; i < transforms.numberOfItems; i++) {
+                const matrix = transforms.getItem(i).matrix;
+
+                this.tStack.current.multiplySelf(
+                    new DOMMatrix([
+                        matrix.a,
+                        matrix.b,
+                        matrix.c,
+                        matrix.d,
+                        matrix.e,
+                        matrix.f,
+                    ])
+                );
+            }
         }
 
         captureState(node) {
             const style = this.styleStack.current;
 
             return {
-                transform: this.parseTransform(node),
+                transform: new DOMMatrix(this.tStack.current),
                 fill: style.fill,
                 stroke: style.stroke,
                 strokeWeight: style.strokeWeight,
