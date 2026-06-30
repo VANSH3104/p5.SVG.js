@@ -651,6 +651,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
   fn.buildShape = function (callback) {
     const recorder = new ShapeRecorder(this);
     this._activeRecorder = recorder;
+    this.push();
     recorder.start();
     try {
       if (typeof callback === 'function') {
@@ -659,6 +660,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     } finally {
       recorder.stop();
       this._activeRecorder = null;
+      this.pop();
     }
     return recorder.getRecord();
   };
