@@ -89,9 +89,10 @@ export class TransformStack {
 // ---------------------------------------------------
 
 export class ShapeRecorder {
-  constructor(pInst) {
+  constructor(pInst, options = {}) {
     this.p5 = pInst;
     this.active = false;
+    this.draw = options.draw ?? false;
     this.root = new ScopeNode();
     this.scopeStack = [this.root];
     this.tStack = new TransformStack();
