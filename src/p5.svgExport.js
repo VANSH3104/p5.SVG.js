@@ -4,6 +4,7 @@ import {
   ShapeNode,
   BackgroundNode,
   ClearNode,
+  ImageNode,
   TransformStack,
   ShapeRecorder
 } from "./p5.ShapeRecorder.js";
@@ -83,6 +84,42 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           };
         }
       },
+
+      image: {
+        intercept(renderer, recorder) {
+          const original = renderer.image;
+          if (!original) return null;
+
+          renderer.image = function (img, sx, sy, sw, sh, dx, dy, dw, dh) {
+            if (img) {
+              if (img instanceof HTMLImageElement && !img.elt) {
+                img.elt = img;
+              }
+              if (img instanceof HTMLCanvasElement && !img.canvas) {
+                img.canvas = img;
+              }
+            }
+
+            if (recorder.active) {
+              recorder.addNode(
+                new ImageNode(
+                  img,
+                  [sx, sy, sw, sh, dx, dy, dw, dh],
+                  recorder.p5._svgCaptureState()
+                )
+              );
+              if (!recorder.draw) {
+                return;
+              }
+            }
+            return original.call(renderer, img, sx, sy, sw, sh, dx, dy, dw, dh);
+          };
+
+          return () => {
+            renderer.image = original;
+          };
+        }
+      },
     }
   }
 
@@ -119,6 +156,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       this.svgElement.setAttribute('width', this.width);
       this.svgElement.setAttribute('height', this.height);
       this.svgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`);
+      this.svgElement.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
       
       // For path tracking
       this.currentPathElement = null;
@@ -130,6 +168,14 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         el.setAttribute(key, val);
       }
       return el;
+    }
+
+    _getDefs() {
+      if (!this.defsElement) {
+        this.defsElement = this._createElement('defs');
+        this.svgElement.insertBefore(this.defsElement, this.svgElement.firstChild);
+      }
+      return this.defsElement;
     }
 
     colorToSVG(color) {
@@ -554,6 +600,117 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       this._appendShapeElement(pathEl);
     }
 
+    visitImage(imageNode) {
+      const img = imageNode.img;
+      const [sx, sy, sw, sh, dx, dy, dw, dh] = imageNode.args;
+
+      let dataURL = '';
+      if (img) {
+        if (img.canvas && typeof img.canvas.toDataURL === 'function') {
+          try {
+            dataURL = img.canvas.toDataURL();
+          } catch (e) {}
+        }
+        if (!dataURL && img.elt) {
+          if (img.elt instanceof HTMLCanvasElement) {
+            try {
+              dataURL = img.elt.toDataURL();
+            } catch (e) {}
+          } else if (img.elt instanceof HTMLImageElement) {
+            if (img.elt.src && img.elt.src.startsWith('data:')) {
+              dataURL = img.elt.src;
+            } else {
+              try {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.elt.naturalWidth || img.width || img.elt.width;
+                canvas.height = img.elt.naturalHeight || img.height || img.elt.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img.elt, 0, 0);
+                dataURL = canvas.toDataURL();
+              } catch (e) {
+                dataURL = img.elt.src;
+              }
+            }
+          }
+        }
+        if (!dataURL && img instanceof HTMLCanvasElement) {
+          try {
+            dataURL = img.toDataURL();
+          } catch (e) {}
+        }
+        if (!dataURL && img instanceof HTMLImageElement) {
+          if (img.src && img.src.startsWith('data:')) {
+            dataURL = img.src;
+          } else {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.naturalWidth || img.width;
+              canvas.height = img.naturalHeight || img.height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0);
+              dataURL = canvas.toDataURL();
+            } catch (e) {
+              dataURL = img.src;
+            }
+          }
+        }
+        if (!dataURL && typeof img === 'string') {
+          dataURL = img;
+        }
+      }
+
+      if (!dataURL) return;
+
+      const imgW = img.width || (img.elt && (img.elt.naturalWidth || img.elt.width)) || 0;
+      const imgH = img.height || (img.elt && (img.elt.naturalHeight || img.elt.height)) || 0;
+
+      const isCropped = imgW > 0 && imgH > 0 && (sx !== 0 || sy !== 0 || Math.abs(sw - imgW) > 0.1 || Math.abs(sh - imgH) > 0.1);
+
+      let imgEl;
+      if (isCropped) {
+        this.clipPathCounter = (this.clipPathCounter || 0) + 1;
+        const clipId = `clip-p5svg-${this.clipPathCounter}`;
+        const clipPath = this._createElement('clipPath', { id: clipId });
+        const clipRect = this._createElement('rect', {
+          x: dx,
+          y: dy,
+          width: dw,
+          height: dh
+        });
+        clipPath.appendChild(clipRect);
+        this._getDefs().appendChild(clipPath);
+
+        const scaleX = dw / sw;
+        const scaleY = dh / sh;
+        const fullW = imgW * scaleX;
+        const fullH = imgH * scaleY;
+        const imgX = dx - sx * scaleX;
+        const imgY = dy - sy * scaleY;
+
+        imgEl = this._createElement('image', {
+          x: imgX,
+          y: imgY,
+          width: fullW,
+          height: fullH,
+          'clip-path': `url(#${clipId})`,
+          preserveAspectRatio: 'none'
+        });
+      } else {
+        imgEl = this._createElement('image', {
+          x: dx,
+          y: dy,
+          width: dw,
+          height: dh,
+          preserveAspectRatio: 'none'
+        });
+      }
+
+      imgEl.setAttribute('href', dataURL);
+      imgEl.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', dataURL);
+
+      this._appendShapeElement(imgEl);
+    }
+
     // ============ END ADDED PRIMITIVES ============
 
     buildSVG() {
@@ -594,8 +751,21 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           case 'clear':
             this.replayClear(child);
             break;
+
+          case 'image':
+            this.replayImage(child);
+            break;
           }
         }
+    }
+
+    replayImage(node) {
+      const p = this.p5;
+      p.push();
+      this.applyState(node.state);
+      const [sx, sy, sw, sh, dx, dy, dw, dh] = node.args;
+      p.image(node.img, dx, dy, dw, dh, sx, sy, sw, sh);
+      p.pop();
     }
 
     replayShape(shapeNode) {
