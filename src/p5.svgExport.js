@@ -275,12 +275,21 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     // Path primitives
     visitAnchor(anchor) {
       const vertex = anchor.getEndVertex();
-      const pathEl = this._createElement('path', {
-        d: `M ${vertex.position.x} ${vertex.position.y}`
-      });
-      this._applyStyle(pathEl);
-      this._appendShapeElement(pathEl);
-      this.currentPathElement = pathEl;
+
+      if (!this.currentPathElement) {
+        const pathEl = this._createElement("path", {
+            d: `M ${vertex.position.x} ${vertex.position.y}`
+        });
+        this._applyStyle(pathEl);
+        this._appendShapeElement(pathEl);
+        this.currentPathElement = pathEl;
+      } else {
+          const d = this.currentPathElement.getAttribute("d");
+          this.currentPathElement.setAttribute(
+              "d",
+              `${d} M ${vertex.position.x} ${vertex.position.y}`
+          );
+      }
     }
 
     visitLineSegment(lineSegment) {

@@ -26,7 +26,9 @@ export class ShapeNode extends NodeBase {
   }
   toSVGElement(visitor) {
     visitor.currentState = this.state;
+    visitor.currentPathElement = null;
     this.shape.accept(visitor);
+    visitor.currentPathElement = null;
   }
 }
 
