@@ -218,12 +218,58 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             );
         }
     }
+    function parseSVGText(pInst, svgText) {
+        const importer = new SVGImporter(pInst);
+        return importer.import(svgText);
+    }
 
     // SVG IMPORT api
-    fn.loadSVG = function(svgText) {
-        const importer = new SVGImporter(this);
-        return importer.import(svgText)
-    }
+    fn.parseSVG = function (svgText) {
+        return parseSVGText(this, svgText);
+    };
+
+    fn.loadSVG = async function (
+        path,
+        successCallback,
+        failureCallback
+    ) {
+        try {
+            const req = new Request(path, {
+                method: 'GET',
+                mode: 'cors'
+            });
+            let svgText;
+            if (typeof request === 'function') {
+                const { data } = await request(req, 'text');
+                svgText = data;
+            } else {
+                const response = await fetch(req);
+                if (!response.ok) {
+                    throw new Error(`Failed to load SVG: ${path}`);
+                }
+                svgText = await response.text();
+            }
+            const shape = parseSVGText(this, svgText);
+            const cb = () => {
+                if (successCallback) {
+                    return successCallback(shape);
+                }
+                return shape;
+            };
+            return this._internal
+                ? this._internal(cb)
+                : cb();
+        } catch (err) {
+            if (typeof p5._friendlyFileLoadError === 'function') {
+                p5._friendlyFileLoadError(1, path);
+            }
+            if (typeof failureCallback === 'function') {
+                return failureCallback(err);
+            } else {
+                throw err;
+            }
+        }
+    };
 }
 
 if (typeof p5 !== 'undefined') {
