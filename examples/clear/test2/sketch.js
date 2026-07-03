@@ -13,5 +13,6 @@ function setup() {
   });
 
   console.log(recorded);
+  shape(recorded);
   // saveSVG(recorded, "clear.svg");
 }

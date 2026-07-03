@@ -63,5 +63,6 @@ function setup() {
 
   console.log(recorded);
 
+  shape(recorded);
   // saveSVG(recorded, "flat.svg");
 }

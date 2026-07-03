@@ -24,7 +24,7 @@ Include the p5.js library and the `p5.svgExport.min.js` addon in your project's 
   <!-- Load p5.js -->
   <script src="https://raw.esm.sh/pr/p5@02bcb7e/lib/p5.min.js"></script>
   <!-- Load p5.SVG Export Addon -->
-  <script src="https://cdn.jsdelivr.net/npm/p5.svg-io@0.1.2/dist/p5.svgExport.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5.svg-io@0.1.3/dist/p5.svgExport.min.js"></script>
 </head>
 <body>
   <script src="sketch.js"></script>
@@ -73,6 +73,21 @@ function setup() {
 }
 ```
 
+By default, `buildShape()` intercepts and records the drawing commands *without* rendering them to the screen canvas during the callback. If you want the drawing commands to be drawn onto the screen while being recorded, pass `{ draw: true }` as the second argument:
+
+```js
+function setup() {
+  createCanvas(400, 400);
+
+  // The circle is drawn on the screen AND recorded into `drawing`
+  const drawing = buildShape(() => {
+    background(255);
+    fill(255, 0, 0);
+    circle(100, 100, 50);
+  }, { draw: true });
+}
+```
+
 ### 2. State-Based Capture (`beginRecord` & `endRecord`)
 Best when drawing operations span multiple functions, are event-driven, or when wrapping code in a callback is not practical.
 
@@ -97,7 +112,27 @@ function mousePressed() {
 }
 ```
 
-### 3. Retrieving the Raw SVG String (`getSVG`)
+### 3. Replaying / Drawing a Shape (`shape`)
+If you want to render a previously recorded shape back onto the canvas (acting as a retained graphics system), call `shape(record)`. This can be done directly inside `setup()` to replay the recorded commands:
+
+```js
+let recorded;
+
+function setup() {
+  createCanvas(400, 400);
+
+  // Record your shape once
+  recorded = buildShape(() => {
+    fill(255, 0, 0);
+    circle(200, 200, 100);
+  });
+
+  // Replay/draw the recorded shape onto the canvas
+  shape(recorded);
+}
+```
+
+### 4. Retrieving the Raw SVG String (`getSVG`)
 If you want to access the raw SVG XML string directly (e.g., to display it on the page or send it to a server) instead of triggering a file download:
 
 ```js

@@ -29,6 +29,7 @@ suite('Addon Integration', function() {
     assert.typeOf(fn.beginRecord, 'function');
     assert.typeOf(fn.endRecord, 'function');
     assert.typeOf(fn.getSVG, 'function');
+    assert.typeOf(fn.shape, 'function');
     assert.typeOf(fn.saveSVG, 'function');
     assert.typeOf(fn.saveAsSVG, 'function');
     assert.typeOf(fn._svgCaptureAdapters, 'function');
@@ -183,5 +184,65 @@ suite('Addon Integration', function() {
       URL.createObjectURL = originalCreateObjectURL;
       URL.revokeObjectURL = originalRevokeObjectURL;
     }
+  });
+
+  test('should replay recorded shapes via shape()', function() {
+    const fn = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn);
+
+    let drawShapeCalled = false;
+    let applyMatrixCalled = false;
+
+    const pInst = {
+      width: 600,
+      height: 600,
+      _renderer: {
+        states: {
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
+          strokeWeight: 1
+        },
+        drawShape(shape) {
+          drawShapeCalled = true;
+          return shape;
+        }
+      },
+      applyMatrix(a, b, c, d, e, f) {
+        applyMatrixCalled = true;
+      },
+      push() {},
+      pop() {},
+      fill() {},
+      stroke() {},
+      noFill() {},
+      noStroke() {},
+      strokeWeight() {}
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    const mockRecord = {
+      type: 'scope',
+      children: [
+        {
+          type: 'shape',
+          shape: { accept() {} },
+          state: {
+            transform: { a: 1, b: 0, c: 0, d: 1, e: 10, f: 20 },
+            fill: createMockColor(255, 0, 0, 255, '#ff0000'),
+            stroke: createMockColor(0, 0, 0, 255, '#000000'),
+            strokeWeight: 2
+          }
+        }
+      ]
+    };
+
+    pInst.shape(mockRecord);
+
+    assert.isTrue(drawShapeCalled, 'drawShape should be called on the renderer');
+    assert.isTrue(applyMatrixCalled, 'applyMatrix should be called to set transform');
   });
 });
