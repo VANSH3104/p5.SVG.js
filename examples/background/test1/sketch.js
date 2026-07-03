@@ -16,5 +16,6 @@ function setup() {
   });
 
   console.log(recorded);
+  shape(recorded);
   // saveSVG(recorded, "background.svg");
 }

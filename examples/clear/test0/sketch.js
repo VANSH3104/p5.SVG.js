@@ -11,4 +11,5 @@ function setup() {
   });
 
   console.log(recorded);
+  shape(recorded);
 }
