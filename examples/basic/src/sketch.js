@@ -11,5 +11,6 @@ function setup() {
     triangle(150, 200, 180, 250, 120, 250);
   });
 
+  shape(recorded);
   // saveSVG(recorded); 
 }

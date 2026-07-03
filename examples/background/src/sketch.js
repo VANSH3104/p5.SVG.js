@@ -24,5 +24,6 @@ function setup() {
 
   });
 
+  shape(recorded);
   // saveSVG(recorded);
 }
