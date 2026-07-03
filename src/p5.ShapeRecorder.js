@@ -26,7 +26,9 @@ export class ShapeNode extends NodeBase {
   }
   toSVGElement(visitor) {
     visitor.currentState = this.state;
+    visitor.currentPathElement = null;
     this.shape.accept(visitor);
+    visitor.currentPathElement = null;
   }
 }
 
@@ -50,6 +52,21 @@ export class ClearNode extends NodeBase {
     visitor.clear();
   }
 }
+
+export class ImageNode extends NodeBase {
+  constructor(img, args, state) {
+    super();
+    this.type = 'image';
+    this.img = img;
+    this.args = args;
+    this.state = state;
+  }
+  toSVGElement(visitor) {
+    visitor.currentState = this.state;
+    visitor.visitImage(this);
+  }
+}
+
 
 // --- TransformStack ---
 export class TransformStack {
