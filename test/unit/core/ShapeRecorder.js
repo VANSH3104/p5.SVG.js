@@ -222,6 +222,54 @@ suite('ShapeRecorder', function() {
     assert.strictEqual(pInst.translate, origTranslate);
   });
 
+  test('should record reusable shapes nested via pInst.shape()', function() {
+    const pInst = createPInst();
+    
+    // Add missing p5 methods required by CanvasReplay.applyState
+    pInst.applyMatrix = () => {};
+    pInst.fill = () => {};
+    pInst.stroke = () => {};
+    pInst.noFill = () => {};
+    pInst.noStroke = () => {};
+    pInst.strokeWeight = () => {};
+
+    // Mock colors that have _getRGBA
+    const mockColor = {
+      _getRGBA() { return [255, 0, 0, 255]; }
+    };
+    pInst._renderer.states.fillColor = mockColor;
+    pInst._renderer.states.strokeColor = mockColor;
+    
+    // Build first reusable shape
+    const shapeA = new MockShape('shapeA');
+    const reusable = pInst.buildShape(() => {
+      pInst._renderer.drawShape(shapeA);
+    });
+
+    // Verify first buildShape recorded correctly
+    assert.strictEqual(reusable.type, 'scope');
+    assert.strictEqual(reusable.children.length, 1);
+    assert.strictEqual(reusable.children[0].type, 'shape');
+    assert.strictEqual(reusable.children[0].shape.name, 'shapeA');
+
+    // Build outer shape that reuses the first shape via pInst.shape()
+    const parentRecord = pInst.buildShape(() => {
+      pInst.shape(reusable);
+    });
+
+    // Verify outer record contains nested scope representing the replayed shape
+    assert.strictEqual(parentRecord.type, 'scope');
+    assert.strictEqual(parentRecord.children.length, 1);
+    
+    const nestedScope = parentRecord.children[0];
+    assert.strictEqual(nestedScope.type, 'scope');
+    assert.strictEqual(nestedScope.children.length, 1);
+    
+    const replayedShapeNode = nestedScope.children[0];
+    assert.strictEqual(replayedShapeNode.type, 'shape');
+    assert.strictEqual(replayedShapeNode.shape.name, 'shapeA');
+  });
+
   test('should handle buildShape called without a callback function', function() {
     const pInst = createPInst();
 

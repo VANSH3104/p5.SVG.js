@@ -219,4 +219,55 @@ visualSuite('SVG Shapes', () => {
     await screenshot(p.getSVG(record));
   });
 
+  // ── Reusable / Nested Shapes
+  visualTest('reusable shape', async (p, screenshot) => {
+    // Custom larger canvas to accommodate multiple/larger replayed shapes
+    p.createCanvas(400, 400);
+    p.background(220);
+    p.fill(255);
+    p.stroke(0);
+    p.strokeWeight(1);
+
+    // Build reusable sub-shape
+    const leaf = p.buildShape(() => {
+      p.fill(0, 200, 100);
+      p.noStroke();
+      p.ellipse(0, 0, 30, 60);
+    });
+
+    // Build parent shape that reuses the sub-shape
+    const flower = p.buildShape(() => {
+      p.background(200);
+      p.push();
+      p.translate(100, 100);
+      
+      // Draw outer details
+      p.fill(255, 150, 0);
+      p.circle(0, 0, 40);
+
+      // Replay leaf multiple times with rotation and scale
+      for (let i = 0; i < 4; i++) {
+        p.push();
+        p.rotate(p.TWO_PI * i / 4);
+        p.translate(0, -40);
+        p.scale(0.8 + i * 0.1);
+        p.shape(leaf);
+        p.pop();
+      }
+      p.pop();
+    });
+
+    // 1. Test Replay directly on the canvas
+    p.background(255);
+    
+    // Draw flower
+    p.shape(flower);
+
+    // Capture the replayed canvas directly
+    await screenshot();
+
+    // 2. Test SVG export of the flower shape directly
+    await screenshot(p.getSVG(flower));
+  });
+
 });

@@ -628,6 +628,95 @@ export function SVGExportAddon(p5, fn, lifecycles) {
   }
 
   // ---------------------------------------------------
+  // Canvas Replayer
+  // ---------------------------------------------------
+
+  class CanvasReplay {
+    constructor(pInst) {
+      this.p5 = pInst;
+    }
+
+    replay(record) {
+      if (!record) return;
+      this.replayScope(record);
+    }
+
+    replayScope(scope) {
+      for (const child of scope.children) {
+        switch(child.type) {
+          case 'scope':
+            this.replayScope(child);
+            break;
+
+          case 'shape':
+            this.replayShape(child);
+            break;
+
+          case 'background':
+            this.replayBackground(child);
+            break;
+
+          case 'clear':
+            this.replayClear(child);
+            break;
+          }
+        }
+    }
+
+    replayShape(shapeNode) {
+      const p = this.p5;
+      p.push();
+      this.applyState(shapeNode.state);
+      p._renderer.drawShape(shapeNode.shape);
+      p.pop();
+    }
+
+    replayClear() {
+      this.p5.clear();
+    }
+
+    replayBackground(node) {
+      const p = this.p5;
+
+      if (!node.color) {
+        p.clear();
+        return;
+      }
+
+      const [r, g, b, a] = node.color._getRGBA([255, 255, 255, 255]);
+      p.background(r, g, b, a);
+    }
+
+    applyState(state) {
+      const p = this.p5;
+      if (!state) return;
+
+      if (state.transform) {
+        const m = state.transform;
+        p.applyMatrix(m.a, m.b, m.c, m.d, m.e, m.f);
+      }
+
+      if (state.fill) {
+        const [r, g, b, a] = state.fill._getRGBA([255, 255, 255, 255]);
+        p.fill(r, g, b, a);
+      } else {
+        p.noFill();
+      }
+
+      if (state.stroke) {
+        const [r, g, b, a] = state.stroke._getRGBA([255, 255, 255, 255]);
+        p.stroke(r, g, b, a);
+      } else {
+        p.noStroke();
+      }
+
+      if (state.strokeWeight != null) {
+        p.strokeWeight(state.strokeWeight);
+      }
+    }
+  }
+
+  // ---------------------------------------------------
   // Shape Recorder
   // ---------------------------------------------------
 
@@ -700,6 +789,12 @@ export function SVGExportAddon(p5, fn, lifecycles) {
         },
         scale: (args) => {
           this.tStack.scale(args[0] || 1, args[1]);
+        },
+        applyMatrix: (args) => {
+          const [a, b, c, d, e, f] = args;
+          this.tStack.current.multiplySelf(
+            new DOMMatrix([a, b, c, d, e, f])
+          );
         }
       };
 
@@ -792,6 +887,11 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     const visitor = new SVGVisitor(this);
     record.toSVGElement(visitor);
     return visitor.buildSVG();
+  };
+
+  fn.shape = function (record) {
+    const replay = new CanvasReplay(this);
+    replay.replay(record);
   };
 
   fn.saveSVG = function (record, filename = 'drawing.svg') {
