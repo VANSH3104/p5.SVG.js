@@ -8,7 +8,8 @@
     "README.md"
   ],
   "exports": {
-    "./export": "./dist/p5.svgExport.min.js"
+    "./export": "./dist/p5.svgExport.min.js",
+    "./import": "./dist/p5.svgImport.min.js"
   },
   "scripts": {
     "build": "rollup -c rollup.config.js",
