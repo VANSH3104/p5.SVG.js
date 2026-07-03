@@ -28,6 +28,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
               if (p5.Shape) {
                 renderer._currentShape = new p5.Shape(renderer.getCommonVertexProperties());
               }
+              if (!recorder.draw) {
+                return;
+              }
             }
             return original.call(renderer, shape);
           };
@@ -47,6 +50,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
             if (recorder.active) {
               const c = recorder.p5.color(...args);
               recorder.addNode(new BackgroundNode(c));
+              if (!recorder.draw) {
+                return;
+              }
             }
             return original.apply(renderer, args);
           };
@@ -65,6 +71,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           renderer.clear = (...args) => {
             if (recorder.active) {
               recorder.addNode(new ClearNode());
+              if (!recorder.draw) {
+                return;
+              }
             }
             return original.apply(renderer, args);
           };
@@ -648,8 +657,10 @@ export function SVGExportAddon(p5, fn, lifecycles) {
   // API
   // ---------------------------------------------------
 
-  fn.buildShape = function (callback) {
-    const recorder = new ShapeRecorder(this);
+  fn.buildShape = function (callback, options = {}) {
+    const recorder = new ShapeRecorder(this, {
+      draw: options.draw ?? false
+    });
     this._activeRecorder = recorder;
     this.push();
     recorder.start();
@@ -670,7 +681,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       console.warn('beginRecord() called while already recording. Stopping previous recording.');
       this._activeRecorder.stop();
     }
-    const recorder = new ShapeRecorder(this);
+    const recorder = new ShapeRecorder(this, {
+      draw: true
+    });
     this._activeRecorder = recorder;
     recorder.start();
   };
