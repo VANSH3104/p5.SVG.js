@@ -44,8 +44,10 @@ function setup() {
     circle(100, 100, 50);
     rect(200, 100, 80, 60);
   });
-  //render on canvas
+
+  // Render the recorded shape on the canvas
   shape(drawing);
+
   // Save the recorded drawing as an SVG
   saveSVG(drawing, 'my-art.svg');
 }
