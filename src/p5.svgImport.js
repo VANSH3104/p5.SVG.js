@@ -1,11 +1,33 @@
 import { ShapeRecorder, ShapeNode, TransformStack } from "./p5.ShapeRecorder.js";
 
+class RenderContext {
+    constructor(parent) {
+        if (parent) {
+            this.opacity = parent.opacity;
+        } else {
+            this.opacity = 1;
+            //todo future properties like blendMode, etc.
+        }
+    }
+    clone() {
+        return new RenderContext(this);
+    }
+}
 export function SVGImportAddon(p5, fn, lifecycles) {
     class SVGImporter {
         constructor(p5){
             this.p5 = p5;
             this.recorder = new ShapeRecorder(p5);
             this.tStack = new TransformStack();
+            this.renderContextStack = [
+                new RenderContext()
+            ];
+        }
+
+        get currentRenderContext() {
+            return this.renderContextStack[
+                this.renderContextStack.length - 1
+            ];
         }
         import(svgText) {
             const parser = new DOMParser();
@@ -35,7 +57,9 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             }
             this.tStack.push();
             this.parseTransform(node);
-            switch (node.tagName) {
+            this.parseRenderContext(node);
+            const tag = node.localName;
+            switch (tag) {
                 case "svg": {
                     this.visitSVG(node);
                     break;
@@ -55,13 +79,22 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     break;
                 }
             }
+            this.renderContextStack.pop();
             this.tStack.pop();
+        }
+
+        parseRenderContext(node) {
+            const context = this.currentRenderContext.clone();
+            const cs = getComputedStyle(node);
+            context.opacity *= Number(cs.opacity || 1);
+
+            this.renderContextStack.push(context);
         }
 
         parseStyle(node) {
             const cs = getComputedStyle(node);
 
-            const opacity = Number(cs.opacity || 1);
+            const opacity = this.currentRenderContext.opacity;
             const fillOpacity = Number(cs.fillOpacity || 1);
             const strokeOpacity = Number(cs.strokeOpacity || 1);
 
@@ -81,7 +114,6 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 fill,
                 stroke,
                 strokeWeight: parseFloat(cs.strokeWidth) || 1,
-                opacity,
                 fillOpacity,
                 strokeOpacity,
             };
@@ -117,7 +149,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 fill: style.fill,
                 stroke: style.stroke,
                 strokeWeight: style.strokeWeight,
-                opacity: style.opacity,
+                renderContext: this.currentRenderContext.clone(),
                 fillOpacity: style.fillOpacity,
                 strokeOpacity: style.strokeOpacity,
             };
@@ -186,12 +218,58 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             );
         }
     }
+    function parseSVGText(pInst, svgText) {
+        const importer = new SVGImporter(pInst);
+        return importer.import(svgText);
+    }
 
     // SVG IMPORT api
-    fn.loadSVG = function(svgText) {
-        const importer = new SVGImporter(this);
-        return importer.import(svgText)
-    }
+    fn.parseSVG = function (svgText) {
+        return parseSVGText(this, svgText);
+    };
+
+    fn.loadSVG = async function (
+        path,
+        successCallback,
+        failureCallback
+    ) {
+        try {
+            const req = new Request(path, {
+                method: 'GET',
+                mode: 'cors'
+            });
+            let svgText;
+            if (typeof request === 'function') {
+                const { data } = await request(req, 'text');
+                svgText = data;
+            } else {
+                const response = await fetch(req);
+                if (!response.ok) {
+                    throw new Error(`Failed to load SVG: ${path}`);
+                }
+                svgText = await response.text();
+            }
+            const shape = parseSVGText(this, svgText);
+            const cb = () => {
+                if (successCallback) {
+                    return successCallback(shape);
+                }
+                return shape;
+            };
+            return this._internal
+                ? this._internal(cb)
+                : cb();
+        } catch (err) {
+            if (typeof p5._friendlyFileLoadError === 'function') {
+                p5._friendlyFileLoadError(1, path);
+            }
+            if (typeof failureCallback === 'function') {
+                return failureCallback(err);
+            } else {
+                throw err;
+            }
+        }
+    };
 }
 
 if (typeof p5 !== 'undefined') {
