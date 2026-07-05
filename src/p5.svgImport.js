@@ -225,18 +225,15 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     break;
                 }
                 case "circle": {
-                    const style = this.parseStyle(node);
-                    this.visitCircle(node, style);
+                    this.visitCircle(node, context);
                     break;
                 }
                 case "ellipse": {
-                    const style = this.parseStyle(node);
-                    this.visitEllipse(node, style);
+                    this.visitEllipse(node, context);
                     break;
                 }
                 case "rect": {
-                    const style = this.parseStyle(node);
-                    this.visitRect(node, style);
+                    this.visitRect(node, context);
                     break;
                 }
             }
@@ -244,43 +241,8 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             this.tStack.pop();
         }
 
-        parseRenderContext(node) {
-            const context = this.currentRenderContext.clone();
-            const cs = getComputedStyle(node);
-            context.opacity *= Number(cs.opacity || 1);
-
-            this.renderContextStack.push(context);
-        }
-
-        parseStyle(node) {
-            const cs = getComputedStyle(node);
-
-            const opacity = this.currentRenderContext.opacity;
-            const fillOpacity = Number(cs.fillOpacity || 1);
-            const strokeOpacity = Number(cs.strokeOpacity || 1);
-
-            let fill = null;
-            if (cs.fill !== "none") {
-                fill = this.p5.color(cs.fill);
-                fill.setAlpha(255 * opacity * fillOpacity);
-            }
-
-            let stroke = null;
-            if (cs.stroke !== "none") {
-                stroke = this.p5.color(cs.stroke);
-                stroke.setAlpha(255 * opacity * strokeOpacity);
-            }
-
-            return {
-                fill,
-                stroke,
-                strokeWeight: parseFloat(cs.strokeWidth) || 1,
-                fillOpacity,
-                strokeOpacity,
-            };
-        }
-
-
+        // Already browser-native: SVGTransformList + DOMMatrix, no manual matrix
+        // string parsing needed here.
         parseTransform(node) {
             if (!node.transform?.baseVal) {
                 return;
@@ -370,7 +332,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             return shape;
         }
       
-        visitCircle(node, style) {
+        visitCircle(node, context) {
             const r = Number(node.getAttribute("r")) || 0;
 
             this.addEllipse(
@@ -378,21 +340,21 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 Number(node.getAttribute("cy")) || 0,
                 r,
                 r,
-                style
+                context
             );
         }
 
-        visitEllipse(node, style) {
+        visitEllipse(node, context) {
             this.addEllipse(
                 Number(node.getAttribute("cx")) || 0,
                 Number(node.getAttribute("cy")) || 0,
                 Number(node.getAttribute("rx")) || 0,
                 Number(node.getAttribute("ry")) || 0,
-                style
+                context
             );
         }
 
-        addEllipse(cx, cy, rx, ry, style) {
+        addEllipse(cx, cy, rx, ry, context) {
             const shape = this.createShape(shape => {
                 shape.ellipsePrimitive(
                     cx - rx,
@@ -401,12 +363,12 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     ry * 2
                 );
             });
-            const state = this.captureState(style);
+            const state = this.captureState(context);
             this.recorder.addNode(
                 new ShapeNode(shape, state)
             );
         }
-        visitRect(node, style) {
+        visitRect(node, context) {
             const x = Number(node.getAttribute("x")) || 0;
             const y = Number(node.getAttribute("y")) || 0;
             const w = Number(node.getAttribute("width")) || 0;
@@ -433,7 +395,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 }
             });
             
-            const state = this.captureState(style);
+            const state = this.captureState(context);
             this.recorder.addNode(
                 new ShapeNode(shape, state)
             );
