@@ -78,6 +78,11 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     this.visitEllipse(node, style);
                     break;
                 }
+                case "rect": {
+                    const style = this.parseStyle(node);
+                    this.visitRect(node, style);
+                    break;
+                }
             }
             this.renderContextStack.pop();
             this.tStack.pop();
@@ -212,6 +217,38 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     ry * 2
                 );
             });
+            const state = this.captureState(style);
+            this.recorder.addNode(
+                new ShapeNode(shape, state)
+            );
+        }
+        visitRect(node, style) {
+            const x = Number(node.getAttribute("x")) || 0;
+            const y = Number(node.getAttribute("y")) || 0;
+            const w = Number(node.getAttribute("width")) || 0;
+            const h = Number(node.getAttribute("height")) || 0;
+            
+            // Get corner radii
+            const rx = Number(node.getAttribute("rx")) || 0;
+            const ry = Number(node.getAttribute("ry")) || 0;
+
+            if (w <= 0 || h <= 0) return;
+
+            // Clamp radii to at most half of the respective side length
+            const resolvedRx = Math.min(rx, w / 2);
+            const resolvedRy = Math.min(ry, h / 2);
+
+            const shape = this.createShape(shape => {
+                if (resolvedRx > 0 || resolvedRy > 0) {
+                    // Use rounded rect with corner radii
+                    const r = Math.min(resolvedRx, resolvedRy);
+                    shape.rectPrimitive(x, y, w, h, r, r, r, r);
+                } else {
+                    // Simple rect
+                    shape.rectPrimitive(x, y, w, h);
+                }
+            });
+            
             const state = this.captureState(style);
             this.recorder.addNode(
                 new ShapeNode(shape, state)
