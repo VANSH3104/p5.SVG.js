@@ -1,5 +1,30 @@
 import { ShapeRecorder, ShapeNode, TransformStack } from "./p5.ShapeRecorder.js";
 
+class TransformResolver {
+    apply(node, transformStack) {
+        if (!node.transform?.baseVal) {
+            return;
+        }
+
+        const transforms = node.transform.baseVal;
+
+        for (let i = 0; i < transforms.numberOfItems; i++) {
+            const matrix = transforms.getItem(i).matrix;
+
+            transformStack.current.multiplySelf(
+                new DOMMatrix([
+                    matrix.a,
+                    matrix.b,
+                    matrix.c,
+                    matrix.d,
+                    matrix.e,
+                    matrix.f,
+                ])
+            );
+        }
+    }
+}
+
 class StyleResolver {
     resolveNodeStyle(node, parentContext) {
         const context = parentContext.clone();
@@ -144,7 +169,6 @@ class RenderContext {
             this.visibility = "visible";
             this.display = "inline";
             this.color = "rgb(0, 0, 0)"; 
-            this.opacity = 1;
             //todo future properties like blendMode, etc.
         }
     }
@@ -175,8 +199,73 @@ function parseLength(val, defaultValue) {
 }
 
 
-
 export function SVGImportAddon(p5, fn, lifecycles) {
+    class ShapeBuilder {
+        constructor(pInst, recorder, transformStack) {
+            this.p5 = pInst;
+            this.recorder = recorder;
+            this.transformStack = transformStack;
+        }
+
+        makeColor(colorStr, opacity, context) {
+            if (colorStr && colorStr.startsWith("url(")) {
+                warnOnce("SVG Importer Warning: Gradients and patterns (url(...)) are not supported yet.");
+                return null;
+            }
+            if (!colorStr || colorStr === "none") {
+                return null;
+            }
+            let parsedColor = colorStr;
+            if (parsedColor === "currentColor") {
+                parsedColor = context.color || "rgb(0, 0, 0)";
+            }
+            try {
+                // Parse color first
+                const c = this.p5.color(parsedColor);
+                // Convert to a standardized RGBA string using documented public API to resolve HSL/HSB to RGB coords
+                const rgbStr = c.toString('rgba');
+                const rgbColor = this.p5.color(rgbStr);
+                // Set alpha using public API on the RGB-mode color to avoid p5 HSL alpha-scaling bugs
+                rgbColor.setAlpha(this.p5.alpha(rgbColor) * opacity);
+
+                return rgbColor;
+            } catch (e) {
+                warnOnce(`SVG Importer Warning: Failed to parse color: "${colorStr}"`);
+                return null;
+            }
+        }
+
+        captureState(context) {
+            return {
+                transform: new DOMMatrix(this.transformStack.current),
+                fill: this.makeColor(context.fill, context.opacity * context.fillOpacity, context),
+                stroke: this.makeColor(context.stroke, context.opacity * context.strokeOpacity, context),
+                strokeWeight: context.strokeWidth,
+                renderContext: context.clone(),
+                fillOpacity: context.fillOpacity,
+                strokeOpacity: context.strokeOpacity,
+            };
+        }
+
+        // p5.Shape and p5.Vector are class-level (namespace) properties, not
+        // instance properties, so they must come from the SVGImportAddon
+        // closure's `p5` parameter rather than from `this.p5` (the sketch instance).
+        createShape(builder) {
+            const shape = new p5.Shape({
+                position: new p5.Vector(0, 0)
+            });
+            shape.beginShape();
+            builder(shape);
+            shape.endShape();
+            return shape;
+        }
+
+        emitShape(shape, context) {
+            const state = this.captureState(context);
+            this.recorder.addNode(new ShapeNode(shape, state));
+        }
+    }
+
     class SVGImporter {
         constructor(p5){
             this.p5 = p5;
@@ -184,6 +273,12 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             this.tStack = new TransformStack();
             this.renderContextStack = [new RenderContext()];
             this.styleResolver = new StyleResolver();
+            this.transformResolver = new TransformResolver();
+            this.shapeBuilder = new ShapeBuilder(
+                p5,
+                this.recorder,
+                this.tStack
+            );
         }
 
         get currentRenderContext() {
@@ -219,7 +314,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 return;
             }
             this.tStack.push();
-            this.parseTransform(node);
+            this.transformResolver.apply(node, this.tStack);
             const parentContext = this.currentRenderContext;
             const context = this.styleResolver.resolveNodeStyle(node, parentContext);
             this.renderContextStack.push(context);
@@ -250,71 +345,6 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             this.tStack.pop();
         }
 
-        // Already browser-native: SVGTransformList + DOMMatrix, no manual matrix
-        // string parsing needed here.
-        parseTransform(node) {
-            if (!node.transform?.baseVal) {
-                return;
-            }
-
-            const transforms = node.transform.baseVal;
-
-            for (let i = 0; i < transforms.numberOfItems; i++) {
-                const matrix = transforms.getItem(i).matrix;
-
-                this.tStack.current.multiplySelf(
-                    new DOMMatrix([
-                        matrix.a,
-                        matrix.b,
-                        matrix.c,
-                        matrix.d,
-                        matrix.e,
-                        matrix.f,
-                    ])
-                );
-            }
-        }
-
-        makeColor(colorStr, opacity, context) {
-            if (colorStr && colorStr.startsWith("url(")) {
-                warnOnce("SVG Importer Warning: Gradients and patterns (url(...)) are not supported yet.");
-                return null;
-            }
-            if (!colorStr || colorStr === "none") {
-                return null;
-            }
-            let parsedColor = colorStr;
-            if (parsedColor === "currentColor") {
-                parsedColor = context.color || "rgb(0, 0, 0)";
-            }
-            try {
-                // Parse color first
-                const c = this.p5.color(parsedColor);
-                // Convert to a standardized RGBA string using documented public API to resolve HSL/HSB to RGB coords
-                const rgbStr = c.toString('rgba');
-                const rgbColor = this.p5.color(rgbStr);
-                // Set alpha using public API on the RGB-mode color to avoid p5 HSL alpha-scaling bugs
-                rgbColor.setAlpha(this.p5.alpha(rgbColor) * opacity);
-                
-                return rgbColor;
-            } catch (e) {
-                warnOnce(`SVG Importer Warning: Failed to parse color: "${colorStr}"`);
-                return null;
-            }
-        }
-
-        captureState(context) {
-            return {
-                transform: new DOMMatrix(this.tStack.current),
-                fill: this.makeColor(context.fill, context.opacity * context.fillOpacity, context),
-                stroke: this.makeColor(context.stroke, context.opacity * context.strokeOpacity, context),
-                strokeWeight: context.strokeWidth,
-                renderContext: context.clone(),
-                fillOpacity: context.fillOpacity,
-                strokeOpacity: context.strokeOpacity,
-            };
-        }
-
         visitSVG(node) {
             for (const child of node.children) {
                 this.visit(child);
@@ -331,15 +361,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             this.recorder.leaveScope();
         }
 
-        createShape(builder) {
-            const shape = new p5.Shape({
-                position: new p5.Vector(0, 0)
-            });
-            shape.beginShape();
-            builder(shape);
-            shape.endShape();
-            return shape;
-        }
+
       
         visitCircle(node, context) {
             const r = Number(node.getAttribute("r")) || 0;
@@ -364,7 +386,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         addEllipse(cx, cy, rx, ry, context) {
-            const shape = this.createShape(shape => {
+            const shape = this.shapeBuilder.createShape(shape => {
                 shape.ellipsePrimitive(
                     cx - rx,
                     cy - ry,
@@ -372,10 +394,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     ry * 2
                 );
             });
-            const state = this.captureState(context);
-            this.recorder.addNode(
-                new ShapeNode(shape, state)
-            );
+            this.shapeBuilder.emitShape(shape, context);
         }
         visitRect(node, context) {
             const x = Number(node.getAttribute("x")) || 0;
@@ -393,7 +412,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             const resolvedRx = Math.min(rx, w / 2);
             const resolvedRy = Math.min(ry, h / 2);
 
-            const shape = this.createShape(shape => {
+            const shape = this.shapeBuilder.createShape(shape => {
                 if (resolvedRx > 0 || resolvedRy > 0) {
                     // Use rounded rect with corner radii
                     const r = Math.min(resolvedRx, resolvedRy);
@@ -404,10 +423,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 }
             });
             
-            const state = this.captureState(context);
-            this.recorder.addNode(
-                new ShapeNode(shape, state)
-            );
+            this.shapeBuilder.emitShape(shape, context);
         }
     }
     function parseSVGText(pInst, svgText) {
