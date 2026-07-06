@@ -42,7 +42,7 @@ class StyleResolver {
 
     resolveColor(context, node, inlineStyle) {
         const rawColor = this.getProp(node, inlineStyle, "color");
-        if (rawColor !== undefined && rawColor !== "currentColor") {
+        if (rawColor !== undefined && rawColor.trim().toLowerCase() !== "currentcolor") {
             context.color = rawColor;
         }
     }
@@ -107,12 +107,24 @@ class StyleResolver {
 
     getProp(node, inlineStyle, kebabName, camelName) {
         let val;
+
         if (inlineStyle) {
             val = inlineStyle[kebabName];
             if (val !== undefined && val !== "inherit") {
                 return val;
             }
         }
+
+        if (this.styleCache) {
+            const cached = this.styleCache.get(node);
+            if (cached) {
+                val = cached[kebabName];
+                if (val !== undefined && val !== "inherit" && val !== "") {
+                    return val;
+                }
+            }
+        }
+
         val = node.getAttribute(kebabName);
         if (val !== null && val !== "inherit") {
             return val;
@@ -143,7 +155,107 @@ class StyleResolver {
     }
 
     preprocess(svgRoot) {
-        // empty for now
+        this.styleCache = new WeakMap();
+
+        const styleEls = svgRoot.querySelectorAll("style");
+        const allRules = [];
+
+        for (const styleEl of styleEls) {
+            // Retrieve stylesheet via native CSSOM
+            const sheet = styleEl.sheet;
+            if (!sheet) {
+                console.warn("SVG Importer Warning: CSS stylesheet could not be parsed via CSSOM (styleEl.sheet is null).");
+                continue;
+            }
+
+            let rulesList;
+            try {
+                rulesList = sheet.cssRules;
+            } catch (e) {
+                console.warn("SVG Importer Warning: Failed to access cssRules from stylesheet.", e);
+                continue;
+            }
+
+            for (let i = 0; i < rulesList.length; i++) {
+                const rule = rulesList[i];
+
+                if (rule.type !== CSSRule.STYLE_RULE) {
+                    console.warn(`SVG Importer Warning: Skipping non-style rule type ${rule.type} (${rule.cssText})`);
+                    continue;
+                }
+
+                const decl = rule.style;
+                const styles = {};
+                for (let j = 0; j < decl.length; j++) {
+                    const prop = decl[j];
+                    styles[prop] = decl.getPropertyValue(prop).trim();
+                }
+
+                if (Object.keys(styles).length > 0) {
+                    const rawSelectors = rule.selectorText;
+                    if (rawSelectors) {
+                        const selectorList = rawSelectors.split(",");
+                        for (const sel of selectorList) {
+                            const selectorText = sel.trim();
+                            if (selectorText) {
+                                allRules.push({
+                                    selectorText,
+                                    styles,
+                                    specificity: this.getSpecificity(selectorText)
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        allRules.sort((a, b) => a.specificity - b.specificity);
+
+        for (const rule of allRules) {
+            if (!this._isSupportedSelector(rule.selectorText)) continue;
+
+            let matched;
+            try {
+                matched = svgRoot.querySelectorAll(rule.selectorText);
+            } catch (err) {
+                continue;
+            }
+
+            for (const el of matched) {
+                if (!this.styleCache.has(el)) {
+                    this.styleCache.set(el, {});
+                }
+                const cached = this.styleCache.get(el);
+                for (const [prop, val] of Object.entries(rule.styles)) {
+                    cached[prop] = val;
+                }
+            }
+        }
+    }
+
+    getSpecificity(selector) {
+        let a = 0, b = 0, c = 0;
+        const tokens = selector.split(/[\s>+~]+/);
+        for (const token of tokens) {
+            if (!token) continue;
+            const ids = token.match(/#[a-zA-Z0-9_-]+/g);
+            if (ids) a += ids.length;
+            const classes = token.match(/\.[a-zA-Z0-9_-]+/g);
+            if (classes) b += classes.length;
+            const attrs = token.match(/\[[^\]]+\]/g);
+            if (attrs) b += attrs.length;
+            const cleanToken = token.replace(/#[a-zA-Z0-9_-]+/g, "")
+                                   .replace(/\.[a-zA-Z0-9_-]+/g, "")
+                                   .replace(/\[[^\]]+\]/g, "");
+            if (cleanToken && /^[a-zA-Z]/.test(cleanToken)) {
+                c += 1;
+            }
+        }
+        return a * 100 + b * 10 + c;
+    }
+
+    _isSupportedSelector(selectorText) {
+        return selectorText.split(",").every(part => !part.includes(":"));
     }
 }
 
@@ -215,9 +327,12 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             if (!colorStr || colorStr === "none") {
                 return null;
             }
-            let parsedColor = colorStr;
-            if (parsedColor === "currentColor") {
+            let parsedColor = colorStr.trim();
+            if (parsedColor.toLowerCase() === "currentcolor") {
                 parsedColor = context.color || "rgb(0, 0, 0)";
+                if (parsedColor.toLowerCase() === "currentcolor") {
+                    parsedColor = "rgb(0, 0, 0)";
+                }
             }
             try {
                 // Parse color first
@@ -318,6 +433,13 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             const parentContext = this.currentRenderContext;
             const context = this.styleResolver.resolveNodeStyle(node, parentContext);
             this.renderContextStack.push(context);
+
+            if (context.display === "none") {
+                this.renderContextStack.pop();
+                this.tStack.pop();
+                return;
+            }
+
             const tag = node.localName;
             switch (tag) {
                 case "svg": {
@@ -329,15 +451,21 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     break;
                 }
                 case "circle": {
-                    this.visitCircle(node, context);
+                    if (context.visibility === "visible") {
+                        this.visitCircle(node, context);
+                    }
                     break;
                 }
                 case "ellipse": {
-                    this.visitEllipse(node, context);
+                    if (context.visibility === "visible") {
+                        this.visitEllipse(node, context);
+                    }
                     break;
                 }
                 case "rect": {
-                    this.visitRect(node, context);
+                    if (context.visibility === "visible") {
+                        this.visitRect(node, context);
+                    }
                     break;
                 }
             }
