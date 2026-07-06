@@ -1,5 +1,127 @@
 import { ShapeRecorder, ShapeNode, TransformStack } from "./p5.ShapeRecorder.js";
 
+class StyleResolver {
+    resolveNodeStyle(node, parentContext) {
+        const context = parentContext.clone();
+        const styleAttr = node.getAttribute("style");
+        const inlineStyle = styleAttr ? this.parseInlineStyle(styleAttr) : null;
+
+        this.resolveColor(context, node, inlineStyle);
+        this.resolveFill(context, node, inlineStyle);
+        this.resolveStroke(context, node, inlineStyle, parentContext);
+        this.resolveOpacity(context, node, inlineStyle, parentContext);
+        this.resolveDisplayAndVisibility(context, node, inlineStyle, parentContext);
+
+        return context;
+    }
+
+    resolveColor(context, node, inlineStyle) {
+        const rawColor = this.getProp(node, inlineStyle, "color");
+        if (rawColor !== undefined && rawColor !== "currentColor") {
+            context.color = rawColor;
+        }
+    }
+
+    resolveDisplayAndVisibility(context, node, inlineStyle, parentContext) {
+        const rawDisplay = this.getProp(node, inlineStyle, "display");
+        if (parentContext.display === "none") {
+            context.display = "none";
+        } else if (rawDisplay !== undefined) {
+            context.display = rawDisplay;
+        } else {
+            context.display = "inline";
+        }
+
+        const rawVisibility = this.getProp(node, inlineStyle, "visibility");
+        if (rawVisibility !== undefined) {
+            context.visibility = rawVisibility;
+        }
+    }
+
+    resolveOpacity(context, node, inlineStyle, parentContext) {
+        const rawOpacity = this.getProp(node, inlineStyle, "opacity");
+        if (rawOpacity !== undefined) {
+            const val = parseOpacityValue(rawOpacity);
+            if (!isNaN(val)) {
+                context.opacity = parentContext.opacity * val;
+            }
+        }
+        const rawFillOpacity = this.getProp(node, inlineStyle, "fill-opacity", "fillOpacity");
+        if (rawFillOpacity !== undefined) {
+            const val = parseOpacityValue(rawFillOpacity);
+            if (!isNaN(val)) {
+                context.fillOpacity = val;
+            }
+        }
+        const rawStrokeOpacity = this.getProp(node, inlineStyle, "stroke-opacity", "strokeOpacity");
+        if (rawStrokeOpacity !== undefined) {
+            const val = parseOpacityValue(rawStrokeOpacity);
+            if (!isNaN(val)) {
+                context.strokeOpacity = val;
+            }
+        }
+    }
+
+    resolveStroke(context, node, inlineStyle, parentContext) {
+        const rawStroke = this.getProp(node, inlineStyle, "stroke");
+        if (rawStroke !== undefined) {
+            context.stroke = rawStroke;
+        }
+        const rawStrokeWidth = this.getProp(node, inlineStyle, "stroke-width", "strokeWidth");
+        if (rawStrokeWidth !== undefined) {
+            context.strokeWidth = parseLength(rawStrokeWidth, parentContext.strokeWidth);
+        }
+    }
+
+    resolveFill(context, node, inlineStyle) {
+        const rawFill = this.getProp(node, inlineStyle, "fill");
+        if (rawFill !== undefined) {
+            context.fill = rawFill;
+        }
+    }
+
+    getProp(node, inlineStyle, kebabName, camelName) {
+        let val;
+        if (inlineStyle) {
+            val = inlineStyle[kebabName];
+            if (val !== undefined && val !== "inherit") {
+                return val;
+            }
+        }
+        val = node.getAttribute(kebabName);
+        if (val !== null && val !== "inherit") {
+            return val;
+        }
+        if (camelName) {
+            val = node.getAttribute(camelName);
+            if (val !== null && val !== "inherit") {
+                return val;
+            }
+        }
+        return undefined;
+    }
+
+    parseInlineStyle(styleStr) {
+        const styles = {};
+        if (!styleStr) return styles;
+        const decls = styleStr.split(";");
+        for (const decl of decls) {
+            const colonIndex = decl.indexOf(":");
+            if (colonIndex === -1) continue;
+            const prop = decl.slice(0, colonIndex).trim().toLowerCase();
+            const val = decl.slice(colonIndex + 1).trim();
+            if (prop && val) {
+                styles[prop] = val;
+            }
+        }
+        return styles;
+    }
+
+    preprocess(svgRoot) {
+        // empty for now
+    }
+}
+
 class RenderContext {
     constructor(parent) {
         if (parent) {
@@ -31,21 +153,6 @@ class RenderContext {
     }
 }
 
-function parseInlineStyle(styleStr) {
-    const styles = {};
-    if (!styleStr) return styles;
-    const decls = styleStr.split(";");
-    for (const decl of decls) {
-        const colonIndex = decl.indexOf(":");
-        if (colonIndex === -1) continue;
-        const prop = decl.slice(0, colonIndex).trim().toLowerCase();
-        const val = decl.slice(colonIndex + 1).trim();
-        if (prop && val) {
-            styles[prop] = val;
-        }
-    }
-    return styles;
-}
 
 // Parses opacity strings (supporting percentages) and clamps them to [0, 1]
 function parseOpacityValue(raw) {
@@ -67,107 +174,7 @@ function parseLength(val, defaultValue) {
     return num; // Simplified - just return the number
 }
 
-function getProp(node, inlineStyle, kebabName, camelName) {
-    let val;
-    if (inlineStyle) {
-        val = inlineStyle[kebabName];
-        if (val !== undefined && val !== "inherit") {
-            return val;
-        }
-    }
-    val = node.getAttribute(kebabName);
-    if (val !== null && val !== "inherit") {
-        return val;
-    }
-    if (camelName) {
-        val = node.getAttribute(camelName);
-        if (val !== null && val !== "inherit") {
-            return val;
-        }
-    }
-    return undefined;
-}
 
-function resolveFill(context, node, inlineStyle) {
-    const rawFill = getProp(node, inlineStyle, "fill");
-    if (rawFill !== undefined) {
-        context.fill = rawFill;
-    }
-}
-
-function resolveStroke(context, node, inlineStyle, parentContext) {
-    const rawStroke = getProp(node, inlineStyle, "stroke");
-    if (rawStroke !== undefined) {
-        context.stroke = rawStroke;
-    }
-    const rawStrokeWidth = getProp(node, inlineStyle, "stroke-width", "strokeWidth");
-    if (rawStrokeWidth !== undefined) {
-        context.strokeWidth = parseLength(rawStrokeWidth, parentContext.strokeWidth);
-    }
-}
-
-// Resolves opacity attributes, parsing percentages and clamping to [0, 1]
-function resolveOpacity(context, node, inlineStyle, parentContext) {
-    const rawOpacity = getProp(node, inlineStyle, "opacity");
-    if (rawOpacity !== undefined) {
-        const val = parseOpacityValue(rawOpacity);
-        if (!isNaN(val)) {
-            context.opacity = parentContext.opacity * val;
-        }
-    }
-    const rawFillOpacity = getProp(node, inlineStyle, "fill-opacity", "fillOpacity");
-    if (rawFillOpacity !== undefined) {
-        const val = parseOpacityValue(rawFillOpacity);
-        if (!isNaN(val)) {
-            context.fillOpacity = val;
-        }
-    }
-    const rawStrokeOpacity = getProp(node, inlineStyle, "stroke-opacity", "strokeOpacity");
-    if (rawStrokeOpacity !== undefined) {
-        const val = parseOpacityValue(rawStrokeOpacity);
-        if (!isNaN(val)) {
-            context.strokeOpacity = val;
-        }
-    }
-}
-
-function resolveDisplayAndVisibility(context, node, inlineStyle, parentContext) {
-    const rawDisplay = getProp(node, inlineStyle, "display");
-    if (parentContext.display === "none") {
-        context.display = "none";
-    } else if (rawDisplay !== undefined) {
-        context.display = rawDisplay;
-    } else {
-        context.display = "inline";
-    }
-
-    const rawVisibility = getProp(node, inlineStyle, "visibility");
-    if (rawVisibility !== undefined) {
-        context.visibility = rawVisibility;
-    }
-}
-
-// Resolves the CSS color property, ignoring "currentColor" to preserve inheritance
-function resolveColor(context, node, inlineStyle) {
-    const rawColor = getProp(node, inlineStyle, "color");
-    if (rawColor !== undefined && rawColor !== "currentColor") {
-        context.color = rawColor;
-    }
-}
-
-function resolveNodeStyle(node, parentContext) {
-    const context = parentContext.clone();
-    const styleAttr = node.getAttribute("style");
-    const inlineStyle = styleAttr ? parseInlineStyle(styleAttr) : null;
-
-    resolveColor(context, node, inlineStyle);
-    resolveFill(context, node, inlineStyle);
-    resolveStroke(context, node, inlineStyle, parentContext);
-    resolveOpacity(context, node, inlineStyle, parentContext);
-    resolveDisplayAndVisibility(context, node, inlineStyle, parentContext);
-
-    return context;
-}
 
 export function SVGImportAddon(p5, fn, lifecycles) {
     class SVGImporter {
@@ -176,6 +183,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             this.recorder = new ShapeRecorder(p5);
             this.tStack = new TransformStack();
             this.renderContextStack = [new RenderContext()];
+            this.styleResolver = new StyleResolver();
         }
 
         get currentRenderContext() {
@@ -198,6 +206,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             document.body.appendChild(host);
             try {
                 host.appendChild(svg);
+                this.styleResolver.preprocess(svg);
                 this.visit(host.firstChild);
             } finally {
                 host.remove();
@@ -212,7 +221,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             this.tStack.push();
             this.parseTransform(node);
             const parentContext = this.currentRenderContext;
-            const context = resolveNodeStyle(node, parentContext);
+            const context = this.styleResolver.resolveNodeStyle(node, parentContext);
             this.renderContextStack.push(context);
             const tag = node.localName;
             switch (tag) {
