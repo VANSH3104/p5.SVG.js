@@ -421,8 +421,9 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             } finally {
                 host.remove();
             }
-
-            return this.recorder.getRecord();
+            const record = this.recorder.getRecord();
+            record.sourceSVG = svg.cloneNode(true);
+            return record;
         }
         visit(node) {
             if (!node) {
