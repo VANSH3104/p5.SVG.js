@@ -429,6 +429,10 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             if (!node) {
                 return;
             }
+            const visitor = VISITORS[node.localName];
+            if (!visitor) {
+                return;
+            }
             this.tStack.push();
             this.transformResolver.apply(node, this.tStack);
             const parentContext = this.currentRenderContext;
@@ -440,36 +444,10 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 this.tStack.pop();
                 return;
             }
-
-            const tag = node.localName;
-            switch (tag) {
-                case "svg": {
-                    this.visitSVG(node);
-                    break;
-                }
-                case "g": {
-                    this.visitGroup(node);
-                    break;
-                }
-                case "circle": {
-                    if (context.visibility === "visible") {
-                        this.visitCircle(node, context);
-                    }
-                    break;
-                }
-                case "ellipse": {
-                    if (context.visibility === "visible") {
-                        this.visitEllipse(node, context);
-                    }
-                    break;
-                }
-                case "rect": {
-                    if (context.visibility === "visible") {
-                        this.visitRect(node, context);
-                    }
-                    break;
-                }
+            if (context.display !== "none") {
+                visitor.call(this, node, context);
             }
+
             this.renderContextStack.pop();
             this.tStack.pop();
         }
@@ -564,6 +542,14 @@ export function SVGImportAddon(p5, fn, lifecycles) {
     fn.parseSVG = function (svgText) {
         return parseSVGText(this, svgText);
     };
+
+    const VISITORS = Object.freeze({
+        svg: SVGImporter.prototype.visitSVG,
+        g: SVGImporter.prototype.visitGroup,
+        circle: SVGImporter.prototype.visitCircle,
+        ellipse: SVGImporter.prototype.visitEllipse,
+        rect: SVGImporter.prototype.visitRect,
+    });
 
     fn.loadSVG = async function (
         path,
