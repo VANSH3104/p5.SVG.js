@@ -389,17 +389,6 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             return shape;
         }
 
-        num(node, attr, fallback = 0) {
-            if (!node.hasAttribute(attr)) {
-                return fallback;
-            }
-            if (node[attr] && node[attr].baseVal) {
-                return node[attr].baseVal.value;
-            }
-            const val = node.getAttribute(attr);
-            return parseLength(val, fallback);
-        }
-
         addPrimitive(context, builder) {
             if (context.visibility === "hidden" || context.visibility === "collapse") {
                 return;
@@ -480,9 +469,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 this.tStack.pop();
                 return;
             }
-            if (context.display !== "none") {
-                visitor.call(this, node, context);
-            }
+            visitor.call(this, node, context);
 
             this.renderContextStack.pop();
             this.tStack.pop();
@@ -546,18 +533,6 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     resolvedRy * 2
                 );
             });
-        }
-
-        addEllipse(cx, cy, rx, ry, context) {
-            const shape = this.shapeBuilder.createShape(shape => {
-                shape.ellipsePrimitive(
-                    cx - rx,
-                    cy - ry,
-                    rx * 2,
-                    ry * 2
-                );
-            });
-            this.shapeBuilder.emitShape(shape, context);
         }
 
         visitRect(node, context) {
