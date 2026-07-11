@@ -594,6 +594,12 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             });
         }
 
+        visitPath(node, context) {
+            this.shapeBuilder.addPrimitive(context, shape => {
+                // TODO
+            });
+        }
+
         buildSimpleRect(shape, x, y, w, h, r) {
             if (r > 0) {
                 shape.rectPrimitive(x, y, w, h, r, r, r, r);
@@ -637,6 +643,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         rect: SVGImporter.prototype.visitRect,
         polygon: SVGImporter.prototype.visitPolygon,
         polyline: SVGImporter.prototype.visitPolyline,
+        path: SVGImporter.prototype.visitPath,
     });
 
     fn.loadSVG = async function (
