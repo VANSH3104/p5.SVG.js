@@ -1,5 +1,8 @@
 import { ShapeRecorder, ShapeNode, TransformStack } from "./p5.ShapeRecorder.js";
 
+const PATH_ARG_COUNTS = Object.freeze({ M: 2, L: 2, T: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, A: 7 });
+
+
 class TransformResolver {
     apply(node, transformStack) {
         if (!node.transform?.baseVal) {
@@ -596,7 +599,8 @@ export function SVGImportAddon(p5, fn, lifecycles) {
 
         visitPath(node, context) {
             this.shapeBuilder.addPrimitive(context, shape => {
-                // TODO
+                const d = node.getAttribute("d") || "";
+                const tokens = this.parsePathData(d);
             });
         }
 
@@ -621,6 +625,10 @@ export function SVGImportAddon(p5, fn, lifecycles) {
 
             const pointsAttr = node.getAttribute("points");
             return pointsAttr ? this.parsePointsAttribute(pointsAttr) : [];
+        }
+
+        parsePathData(d) {
+
         }
     }
 
