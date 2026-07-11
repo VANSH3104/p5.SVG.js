@@ -2,6 +2,13 @@ import { ShapeRecorder, ShapeNode, TransformStack } from "./p5.ShapeRecorder.js"
 
 const PATH_ARG_COUNTS = Object.freeze({ M: 2, L: 2, T: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, A: 7 });
 
+const warnedFeatures = new Set();
+function warnOnce(message) {
+    if (!warnedFeatures.has(message)) {
+        warnedFeatures.add(message);
+        console.warn(message);
+    }
+}
 
 class TransformResolver {
     apply(node, transformStack) {
@@ -1100,6 +1107,12 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 }
 
                 if (currentCommand === "Z" || currentCommand === "z") {
+                    shape.endContour(this.p5.CLOSE);
+                    state.currentX = state.startX;
+                    state.currentY = state.startY;
+                    state.lastControlX = state.currentX;
+                    state.lastControlY = state.currentY;
+                    state.lastCommand = currentCommand;
                     continue;
                 }
 
@@ -1119,6 +1132,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 }
 
                 if (args.length < argCount) {
+                    warnOnce("SVG Importer Warning: Malformed SVG path data (insufficient arguments for command).");
                     break;
                 }
                 const handler = PATH_HANDLERS[currentCommand];
