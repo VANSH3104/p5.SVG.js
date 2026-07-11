@@ -646,6 +646,55 @@ export function SVGImportAddon(p5, fn, lifecycles) {
 
             let i = 0;
             let currentCommand = "";
+
+            while (i < tokens.length) {
+
+                let token = tokens[i];
+
+                if (token.type === "command") {
+                    currentCommand = token.value;
+                    i++;
+                } else {
+                    if (!currentCommand) {
+                        break;
+                    }
+
+                    if (currentCommand === "M")
+                        currentCommand = "L";
+                    else if (currentCommand === "m")
+                        currentCommand = "l";
+                }
+
+                if (currentCommand === "Z" || currentCommand === "z") {
+                    continue;
+                }
+
+                const upper = currentCommand.toUpperCase();
+
+                const argCount = PATH_ARG_COUNTS[upper] ?? 0;
+
+                const args = [];
+
+                for (let j = 0; j < argCount; j++) {
+                    if (i < tokens.length && tokens[i].type === "number") {
+                        args.push(tokens[i].value);
+                        i++;
+                    } else {
+                        break;
+                    }
+                }
+
+                if (args.length < argCount) {
+                    break;
+                }
+                const handler = PATH_HANDLERS[currentCommand];
+
+                if (handler) {
+                    handler.call(this, shape, state, args);
+                }
+
+                state.lastCommand = currentCommand;
+            }
         }
     }
 
@@ -659,6 +708,10 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         polygon: SVGImporter.prototype.visitPolygon,
         polyline: SVGImporter.prototype.visitPolyline,
         path: SVGImporter.prototype.visitPath,
+    });
+
+    const PATH_HANDLERS = Object.freeze({
+
     });
 
     function parseSVGText(pInst, svgText) {
