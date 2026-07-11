@@ -628,7 +628,95 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         parsePathData(d) {
+            const tokens = [];
+            let i = 0;
+            const len = d.length;
 
+            let currentCommand = '';
+            let argIndexForCommand = 0;
+
+            // Helper to skip whitespace and commas
+            function skipWhitespaceAndCommas() {
+                while (i < len) {
+                    const char = d[i];
+                    if (char === ' ' || char === '\t' || char === '\r' || char === '\n' || char === ',') {
+                        i++;
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            const COMMANDS = "MmLlHhVvCcSsQqTtAaZz";
+            function isCommandChar(char) {
+                return COMMANDS.includes(char);
+            }
+
+            while (i < len) {
+                skipWhitespaceAndCommas();
+                if (i >= len) break;
+
+                const char = d[i];
+
+                // 1. Check if it's a command
+                if (isCommandChar(char)) {
+                    currentCommand = char;
+                    tokens.push({ type: 'command', value: char });
+                    argIndexForCommand = 0;
+                    i++;
+                    continue;
+                }
+
+                // 2. Otherwise, parse as a number or flag depending on context
+                const isArc = (currentCommand === 'A' || currentCommand === 'a');
+                const isFlag = isArc && (argIndexForCommand === 3 || argIndexForCommand === 4);
+
+                if (isFlag) {
+                    // A flag is just a single character: '0' or '1'
+                    if (char === '0' || char === '1') {
+                        tokens.push({ type: 'number', value: Number(char) });
+                        argIndexForCommand++;
+                        if (argIndexForCommand >= 7) {
+                            argIndexForCommand = 0; // Wrap around for repeated arc parameters
+                        }
+                        i++;
+                    } else {
+                        // Invalid flag, abort parsing to avoid infinite loop
+                        warnOnce("SVG Importer Warning: Malformed SVG path data (invalid arc flag).");
+                        break;
+                    }
+                } else {
+                    // Parse a general float/number
+                    const slice = d.substring(i);
+                    const numMatch = slice.match(/^[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/);
+                    if (numMatch) {
+                        const numStr = numMatch[0];
+                        tokens.push({ type: 'number', value: Number(numStr) });
+                        i += numStr.length;
+
+                        // Update parameter index for the current command
+                        if (currentCommand) {
+                            const upper = currentCommand.toUpperCase();
+                            const totalArgs = PATH_ARG_COUNTS[upper] ?? 0;
+                            if (totalArgs > 0) {
+                                argIndexForCommand++;
+                                if (argIndexForCommand >= totalArgs) {
+                                    // M/m turns into L/l for subsequent coordinate pairs
+                                    if (currentCommand === 'M') currentCommand = 'L';
+                                    else if (currentCommand === 'm') currentCommand = 'l';
+                                    argIndexForCommand = 0;
+                                }
+                            }
+                        }
+                    } else {
+                        // Unrecognized character (skip to prevent infinite loop)
+                        warnOnce("SVG Importer Warning: Malformed SVG path data (unrecognized character).");
+                        i++;
+                    }
+                }
+            }
+
+            return tokens;
         }
 
         // --- Path Geometry Handlers ---
