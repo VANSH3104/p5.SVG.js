@@ -535,6 +535,17 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             });
         }
 
+        visitLine(node, context) {
+            this.shapeBuilder.addPrimitive(context, shape => {
+                shape.line(
+                    this.num(node, "x1"),
+                    this.num(node, "y1"),
+                    this.num(node, "x2"),
+                    this.num(node, "y2")
+                );
+            });
+        }
+
         visitRect(node, context) {
             const w = this.num(node, "width");
             const h = this.num(node, "height");
@@ -588,6 +599,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         g: SVGImporter.prototype.visitGroup,
         circle: SVGImporter.prototype.visitCircle,
         ellipse: SVGImporter.prototype.visitEllipse,
+        line: SVGImporter.prototype.visitLine,
         rect: SVGImporter.prototype.visitRect,
     });
 
