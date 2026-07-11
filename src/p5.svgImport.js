@@ -631,6 +631,38 @@ export function SVGImportAddon(p5, fn, lifecycles) {
 
         }
 
+        // --- Path Geometry Handlers ---
+
+        handlePathM(shape, state, args) {
+            const [x, y] = args;
+            state.currentX = x;
+            state.currentY = y;
+            state.startX = state.currentX;
+            state.startY = state.currentY;
+            if (!state.isFirstContour) {
+                shape.beginContour();
+            }
+            state.isFirstContour = false;
+            shape.vertex(new p5.Vector(state.currentX, state.currentY));
+            state.lastControlX = state.currentX;
+            state.lastControlY = state.currentY;
+        }
+
+        handlePathm(shape, state, args) {
+            const [x, y] = args;
+            state.currentX += x;
+            state.currentY += y;
+            state.startX = state.currentX;
+            state.startY = state.currentY;
+            if (!state.isFirstContour) {
+                shape.beginContour();
+            }
+            state.isFirstContour = false;
+            shape.vertex(new p5.Vector(state.currentX, state.currentY));
+            state.lastControlX = state.currentX;
+            state.lastControlY = state.currentY;
+        }
+
         buildFromLegacyPath(shape, d) {
             const tokens = this.parsePathData(d);
             const state = {
@@ -711,7 +743,8 @@ export function SVGImportAddon(p5, fn, lifecycles) {
     });
 
     const PATH_HANDLERS = Object.freeze({
-
+        M: SVGImporter.prototype.handlePathM,
+        m: SVGImporter.prototype.handlePathm,
     });
 
     function parseSVGText(pInst, svgText) {
