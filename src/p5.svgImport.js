@@ -577,7 +577,9 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             }
 
             if (clampedRx > 0 && clampedRy > 0 && clampedRx !== clampedRy) {
-                // for rounded rect 
+                this.shapeBuilder.addPrimitive(context, shape => {
+                    this.buildRoundedRect(shape, x, y, w, h, clampedRx, clampedRy);
+                });
             } else {
                 this.shapeBuilder.addPrimitive(context, shape => {
                     this.buildSimpleRect(shape, x, y, w, h, clampedRx);
@@ -613,6 +615,49 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     this.buildFromLegacyPath(shape, d);
                 }
             });
+        }
+
+        emitCubicSegments(shape, segments) {
+            for (const seg of segments) {
+                shape.bezierOrder(3);
+                shape.bezierVertex(new p5.Vector(seg.cp1.x, seg.cp1.y));
+                shape.bezierVertex(new p5.Vector(seg.cp2.x, seg.cp2.y));
+                shape.bezierVertex(new p5.Vector(seg.end.x, seg.end.y));
+            }
+        }
+
+        buildRoundedRect(shape, x, y, w, h, rx, ry) {
+            // Start at top-left corner start (x + rx, y)
+            shape.vertex(new p5.Vector(x + rx, y));
+
+            // Line to top-right corner start (x + w - rx, y)
+            shape.vertex(new p5.Vector(x + w - rx, y));
+
+            // Top-Right elliptical corner arc
+            const segs1 = this.arcToBezier(x + w - rx, y, rx, ry, 0, 0, 1, x + w, y + ry);
+            this.emitCubicSegments(shape, segs1);
+
+            // Line to bottom-right corner start (x + w, y + h - ry)
+            shape.vertex(new p5.Vector(x + w, y + h - ry));
+
+            // Bottom-Right elliptical corner arc
+            const segs2 = this.arcToBezier(x + w, y + h - ry, rx, ry, 0, 0, 1, x + w - rx, y + h);
+            this.emitCubicSegments(shape, segs2);
+
+            // Line to bottom-left corner start (x + rx, y + h)
+            shape.vertex(new p5.Vector(x + rx, y + h));
+
+            // Bottom-Left elliptical corner arc
+            const segs3 = this.arcToBezier(x + rx, y + h, rx, ry, 0, 0, 1, x, y + h - ry);
+            this.emitCubicSegments(shape, segs3);
+
+            // Line to top-left corner start (x, y + ry)
+            shape.vertex(new p5.Vector(x, y + ry));
+
+            // Top-Left elliptical corner arc
+            const segs4 = this.arcToBezier(x, y + ry, rx, ry, 0, 0, 1, x + rx, y);
+            this.emitCubicSegments(shape, segs4);
+            shape.endShape(this.p5.CLOSE);
         }
 
         buildSimpleRect(shape, x, y, w, h, r) {
