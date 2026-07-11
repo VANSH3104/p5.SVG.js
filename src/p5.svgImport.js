@@ -575,12 +575,37 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             }
         }
 
+        visitPolygon(node, context) {
+            const points = this.getNativePoints(node);
+            this.shapeBuilder.addPrimitive(context, shape => {
+                for (const pt of points) {
+                    shape.vertex(new p5.Vector(pt.x, pt.y));
+                }
+                shape.endShape(this.p5.CLOSE);
+            });
+        }
+
         buildSimpleRect(shape, x, y, w, h, r) {
             if (r > 0) {
                 shape.rectPrimitive(x, y, w, h, r, r, r, r);
             } else {
                 shape.rectPrimitive(x, y, w, h);
             }
+        }
+
+        getNativePoints(node) {
+            const list = node.points;
+            if (list && list.numberOfItems > 0) {
+                const points = [];
+                for (let i = 0; i < list.numberOfItems; i++) {
+                    const pt = list.getItem(i);
+                    points.push({ x: pt.x, y: pt.y });
+                }
+                return points;
+            }
+
+            const pointsAttr = node.getAttribute("points");
+            return pointsAttr ? this.parsePointsAttribute(pointsAttr) : [];
         }
     }
 
@@ -601,6 +626,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         ellipse: SVGImporter.prototype.visitEllipse,
         line: SVGImporter.prototype.visitLine,
         rect: SVGImporter.prototype.visitRect,
+        polygon: SVGImporter.prototype.visitPolygon,
     });
 
     fn.loadSVG = async function (
