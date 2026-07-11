@@ -627,6 +627,8 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             return pointsAttr ? this.parsePointsAttribute(pointsAttr) : [];
         }
 
+        // --- Legacy fallback parser ------------------------------------------------
+
         parsePathData(d) {
             const tokens = [];
             let i = 0;
@@ -719,6 +721,118 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             return tokens;
         }
 
+        arcToBezier(x1, y1, rx, ry, xAxisRotation, largeArcFlag, sweepFlag, x2, y2) {
+            if (x1 === x2 && y1 === y2) {
+                return [];
+            }
+            if (rx === 0 || ry === 0) {
+                return [{
+                    cp1: { x: x1, y: y1 },
+                    cp2: { x: x2, y: y2 },
+                    end: { x: x2, y: y2 }
+                }];
+            }
+
+            rx = Math.abs(rx);
+            ry = Math.abs(ry);
+
+            const phi = (xAxisRotation * Math.PI) / 180;
+            const cosPhi = Math.cos(phi);
+            const sinPhi = Math.sin(phi);
+
+            const dx = (x1 - x2) / 2;
+            const dy = (y1 - y2) / 2;
+            const x1p = cosPhi * dx + sinPhi * dy;
+            const y1p = -sinPhi * dx + cosPhi * dy;
+
+            let rxSq = rx * rx;
+            let rySq = ry * ry;
+            const x1pSq = x1p * x1p;
+            const y1pSq = y1p * y1p;
+
+            let radiiCheck = x1pSq / rxSq + y1pSq / rySq;
+            if (radiiCheck > 1) {
+                rx *= Math.sqrt(radiiCheck);
+                ry *= Math.sqrt(radiiCheck);
+                rxSq = rx * rx;
+                rySq = ry * ry;
+            }
+
+            const sign = largeArcFlag === sweepFlag ? -1 : 1;
+            const sq = (rxSq * rySq - rxSq * y1pSq - rySq * x1pSq) / (rxSq * y1pSq + rySq * x1pSq);
+            const coef = sign * Math.sqrt(Math.max(0, sq));
+            const cxp = coef * ((rx * y1p) / ry);
+            const cyp = coef * -((ry * x1p) / rx);
+
+            const cx = cosPhi * cxp - sinPhi * cyp + (x1 + x2) / 2;
+            const cy = sinPhi * cxp + cosPhi * cyp + (y1 + y2) / 2;
+
+            const sx = (x1p - cxp) / rx;
+            const sy = (y1p - cyp) / ry;
+            const tx = (-x1p - cxp) / rx;
+            const ty = (-y1p - cyp) / ry;
+
+            const angleBetween = (ux, uy, vx, vy) => {
+                const dot = ux * vx + uy * vy;
+                const len = Math.sqrt(ux * ux + uy * uy) * Math.sqrt(vx * vx + vy * vy);
+                let angle = Math.acos(Math.max(-1, Math.min(1, dot / len)));
+                if (ux * vy - uy * vx < 0) {
+                    angle = -angle;
+                }
+                return angle;
+            };
+
+            const theta1 = angleBetween(1, 0, sx, sy);
+            let deltaTheta = angleBetween(sx, sy, tx, ty);
+
+            if (sweepFlag === 0 && deltaTheta > 0) {
+                deltaTheta -= 2 * Math.PI;
+            } else if (sweepFlag === 1 && deltaTheta < 0) {
+                deltaTheta += 2 * Math.PI;
+            }
+
+            const segments = Math.ceil(Math.abs(deltaTheta) / (Math.PI / 2));
+            const bezierSegments = [];
+
+            let tStart = theta1;
+            const tDiv = deltaTheta / segments;
+
+            for (let i = 0; i < segments; i++) {
+                const tEnd = tStart + tDiv;
+                const alpha = Math.sin(tDiv) * (Math.sqrt(4 + 3 * Math.tan(tDiv / 2) * Math.tan(tDiv / 2)) - 1) / 3;
+
+                const cosStart = Math.cos(tStart);
+                const sinStart = Math.sin(tStart);
+                const cosEnd = Math.cos(tEnd);
+                const sinEnd = Math.sin(tEnd);
+
+                const eX1 = cosStart - alpha * sinStart;
+                const eY1 = sinStart + alpha * cosStart;
+                const eX2 = cosEnd + alpha * sinEnd;
+                const eY2 = sinEnd - alpha * cosEnd;
+                const eX3 = cosEnd;
+                const eY3 = sinEnd;
+
+                const transformPoint = (x, y) => {
+                    const rxX = rx * x;
+                    const ryY = ry * y;
+                    return {
+                        x: cosPhi * rxX - sinPhi * ryY + cx,
+                        y: sinPhi * rxX + cosPhi * ryY + cy
+                    };
+                };
+
+                const cp1 = transformPoint(eX1, eY1);
+                const cp2 = transformPoint(eX2, eY2);
+                const end = transformPoint(eX3, eY3);
+
+                bezierSegments.push({ cp1, cp2, end });
+                tStart = tEnd;
+            }
+
+            return bezierSegments;
+        }
+
         // --- Path Geometry Handlers ---
 
         handlePathM(shape, state, args) {
@@ -749,6 +863,206 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             shape.vertex(new p5.Vector(state.currentX, state.currentY));
             state.lastControlX = state.currentX;
             state.lastControlY = state.currentY;
+        }
+
+        handlePathL(shape, state, args) {
+            const [x, y] = args;
+            state.currentX = x;
+            state.currentY = y;
+            shape.vertex(new p5.Vector(state.currentX, state.currentY));
+            state.lastControlX = state.currentX;
+            state.lastControlY = state.currentY;
+        }
+
+        handlePathl(shape, state, args) {
+            const [x, y] = args;
+            state.currentX += x;
+            state.currentY += y;
+            shape.vertex(new p5.Vector(state.currentX, state.currentY));
+            state.lastControlX = state.currentX;
+            state.lastControlY = state.currentY;
+        }
+
+        handlePathH(shape, state, args) {
+            const [x] = args;
+            state.currentX = x;
+            shape.vertex(new p5.Vector(state.currentX, state.currentY));
+            state.lastControlX = state.currentX;
+            state.lastControlY = state.currentY;
+        }
+
+        handlePathh(shape, state, args) {
+            const [x] = args;
+            state.currentX += x;
+            shape.vertex(new p5.Vector(state.currentX, state.currentY));
+            state.lastControlX = state.currentX;
+            state.lastControlY = state.currentY;
+        }
+
+        handlePathV(shape, state, args) {
+            const [y] = args;
+            state.currentY = y;
+            shape.vertex(new p5.Vector(state.currentX, state.currentY));
+            state.lastControlX = state.currentX;
+            state.lastControlY = state.currentY;
+        }
+
+        handlePathv(shape, state, args) {
+            const [y] = args;
+            state.currentY += y;
+            shape.vertex(new p5.Vector(state.currentX, state.currentY));
+            state.lastControlX = state.currentX;
+            state.lastControlY = state.currentY;
+        }
+
+        handlePathC(shape, state, args) {
+            const [cp1x, cp1y, cp2x, cp2y, endx, endy] = args;
+            shape.bezierOrder(3);
+            shape.bezierVertex(new p5.Vector(cp1x, cp1y));
+            shape.bezierVertex(new p5.Vector(cp2x, cp2y));
+            shape.bezierVertex(new p5.Vector(endx, endy));
+            state.lastControlX = cp2x;
+            state.lastControlY = cp2y;
+            state.currentX = endx;
+            state.currentY = endy;
+        }
+
+        handlePathc(shape, state, args) {
+            const [cp1x, cp1y, cp2x, cp2y, endx, endy] = args;
+            const absCp1x = cp1x + state.currentX;
+            const absCp1y = cp1y + state.currentY;
+            const absCp2x = cp2x + state.currentX;
+            const absCp2y = cp2y + state.currentY;
+            const absEndx = endx + state.currentX;
+            const absEndy = endy + state.currentY;
+            shape.bezierOrder(3);
+            shape.bezierVertex(new p5.Vector(absCp1x, absCp1y));
+            shape.bezierVertex(new p5.Vector(absCp2x, absCp2y));
+            shape.bezierVertex(new p5.Vector(absEndx, absEndy));
+            state.lastControlX = absCp2x;
+            state.lastControlY = absCp2y;
+            state.currentX = absEndx;
+            state.currentY = absEndy;
+        }
+
+        handlePathS(shape, state, args) {
+            const [cp2x, cp2y, endx, endy] = args;
+            let cp1x = state.currentX;
+            let cp1y = state.currentY;
+            if (state.lastCommand === 'C' || state.lastCommand === 'c' || state.lastCommand === 'S' || state.lastCommand === 's') {
+                cp1x = 2 * state.currentX - state.lastControlX;
+                cp1y = 2 * state.currentY - state.lastControlY;
+            }
+            shape.bezierOrder(3);
+            shape.bezierVertex(new p5.Vector(cp1x, cp1y));
+            shape.bezierVertex(new p5.Vector(cp2x, cp2y));
+            shape.bezierVertex(new p5.Vector(endx, endy));
+            state.lastControlX = cp2x;
+            state.lastControlY = cp2y;
+            state.currentX = endx;
+            state.currentY = endy;
+        }
+
+        handlePaths(shape, state, args) {
+            const [cp2x, cp2y, endx, endy] = args;
+            const absCp2x = cp2x + state.currentX;
+            const absCp2y = cp2y + state.currentY;
+            const absEndx = endx + state.currentX;
+            const absEndy = endy + state.currentY;
+            let cp1x = state.currentX;
+            let cp1y = state.currentY;
+            if (state.lastCommand === 'C' || state.lastCommand === 'c' || state.lastCommand === 'S' || state.lastCommand === 's') {
+                cp1x = 2 * state.currentX - state.lastControlX;
+                cp1y = 2 * state.currentY - state.lastControlY;
+            }
+            shape.bezierOrder(3);
+            shape.bezierVertex(new p5.Vector(cp1x, cp1y));
+            shape.bezierVertex(new p5.Vector(absCp2x, absCp2y));
+            shape.bezierVertex(new p5.Vector(absEndx, absEndy));
+            state.lastControlX = absCp2x;
+            state.lastControlY = absCp2y;
+            state.currentX = absEndx;
+            state.currentY = absEndy;
+        }
+
+        handlePathQ(shape, state, args) {
+            const [cpx, cpy, endx, endy] = args;
+            shape.bezierOrder(2);
+            shape.bezierVertex(new p5.Vector(cpx, cpy));
+            shape.bezierVertex(new p5.Vector(endx, endy));
+            state.lastControlX = cpx;
+            state.lastControlY = cpy;
+            state.currentX = endx;
+            state.currentY = endy;
+        }
+
+        handlePathq(shape, state, args) {
+            const [cpx, cpy, endx, endy] = args;
+            const absCpx = cpx + state.currentX;
+            const absCpy = cpy + state.currentY;
+            const absEndx = endx + state.currentX;
+            const absEndy = endy + state.currentY;
+            shape.bezierOrder(2);
+            shape.bezierVertex(new p5.Vector(absCpx, absCpy));
+            shape.bezierVertex(new p5.Vector(absEndx, absEndy));
+            state.lastControlX = absCpx;
+            state.lastControlY = absCpy;
+            state.currentX = absEndx;
+            state.currentY = absEndy;
+        }
+
+        handlePathT(shape, state, args) {
+            const [endx, endy] = args;
+            let cpx = state.currentX;
+            let cpy = state.currentY;
+            if (state.lastCommand === 'Q' || state.lastCommand === 'q' || state.lastCommand === 'T' || state.lastCommand === 't') {
+                cpx = 2 * state.currentX - state.lastControlX;
+                cpy = 2 * state.currentY - state.lastControlY;
+            }
+            shape.bezierOrder(2);
+            shape.bezierVertex(new p5.Vector(cpx, cpy));
+            shape.bezierVertex(new p5.Vector(endx, endy));
+            state.lastControlX = cpx;
+            state.lastControlY = cpy;
+            state.currentX = endx;
+            state.currentY = endy;
+        }
+
+        handlePatht(shape, state, args) {
+            const [endx, endy] = args;
+            const absEndx = endx + state.currentX;
+            const absEndy = endy + state.currentY;
+            let cpx = state.currentX;
+            let cpy = state.currentY;
+            if (state.lastCommand === 'Q' || state.lastCommand === 'q' || state.lastCommand === 'T' || state.lastCommand === 't') {
+                cpx = 2 * state.currentX - state.lastControlX;
+                cpy = 2 * state.currentY - state.lastControlY;
+            }
+            shape.bezierOrder(2);
+            shape.bezierVertex(new p5.Vector(cpx, cpy));
+            shape.bezierVertex(new p5.Vector(absEndx, absEndy));
+            state.lastControlX = cpx;
+            state.lastControlY = cpy;
+            state.currentX = absEndx;
+            state.currentY = absEndy;
+        }
+
+        handlePathA(shape, state, args) {
+            const [rx, ry, xAxisRotation, largeArcFlag, sweepFlag, endx, endy] = args;
+            const segments = this.arcToBezier(state.currentX, state.currentY, rx, ry, xAxisRotation, largeArcFlag, sweepFlag, endx, endy);
+            this.emitCubicSegments(shape, segments);
+            state.lastControlX = state.currentX = endx;
+            state.lastControlY = state.currentY = endy;
+        }
+
+        handlePatha(shape, state, args) {
+            const [rx, ry, xAxisRotation, largeArcFlag, sweepFlag, endx, endy] = args;
+            const absEndx = endx + state.currentX;
+            const absEndy = endy + state.currentY;
+            const segments = this.arcToBezier(state.currentX, state.currentY, rx, ry, xAxisRotation, largeArcFlag, sweepFlag, absEndx, absEndy);
+            this.emitCubicSegments(shape, segments);
+            state.lastControlX = state.currentX = absEndx;
+            state.lastControlY = state.currentY = absEndy;
         }
 
         buildFromLegacyPath(shape, d) {
@@ -833,6 +1147,22 @@ export function SVGImportAddon(p5, fn, lifecycles) {
     const PATH_HANDLERS = Object.freeze({
         M: SVGImporter.prototype.handlePathM,
         m: SVGImporter.prototype.handlePathm,
+        L: SVGImporter.prototype.handlePathL,
+        l: SVGImporter.prototype.handlePathl,
+        H: SVGImporter.prototype.handlePathH,
+        h: SVGImporter.prototype.handlePathh,
+        V: SVGImporter.prototype.handlePathV,
+        v: SVGImporter.prototype.handlePathv,
+        C: SVGImporter.prototype.handlePathC,
+        c: SVGImporter.prototype.handlePathc,
+        S: SVGImporter.prototype.handlePathS,
+        s: SVGImporter.prototype.handlePaths,
+        Q: SVGImporter.prototype.handlePathQ,
+        q: SVGImporter.prototype.handlePathq,
+        T: SVGImporter.prototype.handlePathT,
+        t: SVGImporter.prototype.handlePatht,
+        A: SVGImporter.prototype.handlePathA,
+        a: SVGImporter.prototype.handlePatha,
     });
 
     function parseSVGText(pInst, svgText) {
