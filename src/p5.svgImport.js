@@ -1,6 +1,27 @@
 import { ShapeRecorder, ShapeNode, TransformStack } from "./p5.ShapeRecorder.js";
 
-const PATH_ARG_COUNTS = Object.freeze({ M: 2, L: 2, T: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, A: 7 });
+const PATH_COMMANDS = Object.freeze({
+    M: { count: 2, implicit: "L" },
+    m: { count: 2, implicit: "l" },
+    L: { count: 2, implicit: "L" },
+    l: { count: 2, implicit: "l" },
+    H: { count: 1, implicit: "H" },
+    h: { count: 1, implicit: "h" },
+    V: { count: 1, implicit: "V" },
+    v: { count: 1, implicit: "v" },
+    C: { count: 6, implicit: "C" },
+    c: { count: 6, implicit: "c" },
+    S: { count: 4, implicit: "S" },
+    s: { count: 4, implicit: "s" },
+    Q: { count: 4, implicit: "Q" },
+    q: { count: 4, implicit: "q" },
+    T: { count: 2, implicit: "T" },
+    t: { count: 2, implicit: "t" },
+    A: { count: 7, implicit: "A" },
+    a: { count: 7, implicit: "a" },
+    Z: { count: 0, implicit: "Z" },
+    z: { count: 0, implicit: "z" }
+});
 
 const warnedFeatures = new Set();
 function warnOnce(message) {
@@ -701,12 +722,14 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         // --- Legacy fallback parser ------------------------------------------------
 
         parsePathData(d) {
-            const tokens = [];
+            const commands = [];
             let i = 0;
             const len = d.length;
 
             let currentCommand = '';
             let argIndexForCommand = 0;
+            let currentCommandObj = null;
+            let isCurrentCommandObjPushed = false;
 
             // Helper to skip whitespace and commas
             function skipWhitespaceAndCommas() {
@@ -734,8 +757,15 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 // 1. Check if it's a command
                 if (isCommandChar(char)) {
                     currentCommand = char;
-                    tokens.push({ type: 'command', value: char });
                     argIndexForCommand = 0;
+                    currentCommandObj = { type: char, values: [] };
+                    const cmdMeta = PATH_COMMANDS[char];
+                    if (cmdMeta && cmdMeta.count === 0) {
+                        commands.push(currentCommandObj);
+                        isCurrentCommandObjPushed = true;
+                    } else {
+                        isCurrentCommandObjPushed = false;
+                    }
                     i++;
                     continue;
                 }
@@ -747,7 +777,14 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 if (isFlag) {
                     // A flag is just a single character: '0' or '1'
                     if (char === '0' || char === '1') {
-                        tokens.push({ type: 'number', value: Number(char) });
+                        const numVal = Number(char);
+                        if (currentCommandObj) {
+                            if (!isCurrentCommandObjPushed) {
+                                commands.push(currentCommandObj);
+                                isCurrentCommandObjPushed = true;
+                            }
+                            currentCommandObj.values.push(numVal);
+                        }
                         argIndexForCommand++;
                         if (argIndexForCommand >= 7) {
                             argIndexForCommand = 0; // Wrap around for repeated arc parameters
@@ -764,20 +801,28 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     const numMatch = slice.match(/^[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/);
                     if (numMatch) {
                         const numStr = numMatch[0];
-                        tokens.push({ type: 'number', value: Number(numStr) });
+                        const numVal = Number(numStr);
                         i += numStr.length;
+
+                        if (currentCommandObj) {
+                            if (!isCurrentCommandObjPushed) {
+                                commands.push(currentCommandObj);
+                                isCurrentCommandObjPushed = true;
+                            }
+                            currentCommandObj.values.push(numVal);
+                        }
 
                         // Update parameter index for the current command
                         if (currentCommand) {
-                            const upper = currentCommand.toUpperCase();
-                            const totalArgs = PATH_ARG_COUNTS[upper] ?? 0;
+                            const cmdMeta = PATH_COMMANDS[currentCommand];
+                            const totalArgs = cmdMeta ? cmdMeta.count : 0;
                             if (totalArgs > 0) {
                                 argIndexForCommand++;
                                 if (argIndexForCommand >= totalArgs) {
-                                    // M/m turns into L/l for subsequent coordinate pairs
-                                    if (currentCommand === 'M') currentCommand = 'L';
-                                    else if (currentCommand === 'm') currentCommand = 'l';
+                                    currentCommand = cmdMeta.implicit;
                                     argIndexForCommand = 0;
+                                    currentCommandObj = { type: currentCommand, values: [] };
+                                    isCurrentCommandObjPushed = false;
                                 }
                             }
                         }
@@ -789,7 +834,16 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 }
             }
 
-            return tokens;
+            if (currentCommandObj && isCurrentCommandObjPushed) {
+                const cmdMeta = PATH_COMMANDS[currentCommandObj.type];
+                const count = cmdMeta ? cmdMeta.count : 0;
+                if (currentCommandObj.values.length < count) {
+                    warnOnce("SVG Importer Warning: Malformed SVG path data (insufficient arguments for command).");
+                    commands.pop();
+                }
+            }
+
+            return commands;
         }
 
         arcToBezier(x1, y1, rx, ry, xAxisRotation, largeArcFlag, sweepFlag, x2, y2) {
@@ -1136,80 +1190,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             state.lastControlY = state.currentY = absEndy;
         }
 
-        buildFromLegacyPath(shape, d) {
-            const tokens = this.parsePathData(d);
-            const state = {
-                currentX: 0,
-                currentY: 0,
-                lastControlX: 0,
-                lastControlY: 0,
-                startX: 0,
-                startY: 0,
-                lastCommand: "",
-                isFirstContour: true
-            };
-
-            let i = 0;
-            let currentCommand = "";
-
-            while (i < tokens.length) {
-
-                let token = tokens[i];
-
-                if (token.type === "command") {
-                    currentCommand = token.value;
-                    i++;
-                } else {
-                    if (!currentCommand) {
-                        break;
-                    }
-
-                    if (currentCommand === "M")
-                        currentCommand = "L";
-                    else if (currentCommand === "m")
-                        currentCommand = "l";
-                }
-
-                if (currentCommand === "Z" || currentCommand === "z") {
-                    shape.endContour(this.p5.CLOSE);
-                    state.currentX = state.startX;
-                    state.currentY = state.startY;
-                    state.lastControlX = state.currentX;
-                    state.lastControlY = state.currentY;
-                    state.lastCommand = currentCommand;
-                    continue;
-                }
-
-                const upper = currentCommand.toUpperCase();
-
-                const argCount = PATH_ARG_COUNTS[upper] ?? 0;
-
-                const args = [];
-
-                for (let j = 0; j < argCount; j++) {
-                    if (i < tokens.length && tokens[i].type === "number") {
-                        args.push(tokens[i].value);
-                        i++;
-                    } else {
-                        break;
-                    }
-                }
-
-                if (args.length < argCount) {
-                    warnOnce("SVG Importer Warning: Malformed SVG path data (insufficient arguments for command).");
-                    break;
-                }
-                const handler = PATH_HANDLERS[currentCommand];
-
-                if (handler) {
-                    handler.call(this, shape, state, args);
-                }
-
-                state.lastCommand = currentCommand;
-            }
-        }
-
-        buildFromPathData(shape, pathData) {
+        buildFromCommands(shape, commands) {
             const state = {
                 currentX: 0,
                 currentY: 0,
@@ -1221,9 +1202,9 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 isFirstContour: true
             };
 
-            for (const segment of pathData) {
-                const cmd = segment.type;
-                const args = segment.values;
+            for (const cmdObj of commands) {
+                const cmd = cmdObj.type;
+                const args = cmdObj.values;
 
                 if (cmd === 'Z' || cmd === 'z') {
                     shape.endContour(this.p5.CLOSE);
@@ -1241,6 +1222,19 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 }
                 state.lastCommand = cmd;
             }
+        }
+
+        buildFromLegacyPath(shape, d) {
+            const commands = this.parsePathData(d);
+            this.buildFromCommands(shape, commands);
+        }
+
+        buildFromPathData(shape, pathData) {
+            const commands = pathData.map(cmd => ({
+                type: cmd.type,
+                values: [...cmd.values],
+            }));
+            this.buildFromCommands(shape, pathData);
         }
     }
 
