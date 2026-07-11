@@ -632,7 +632,20 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         buildFromLegacyPath(shape, d) {
+            const tokens = this.parsePathData(d);
+            const state = {
+                currentX: 0,
+                currentY: 0,
+                lastControlX: 0,
+                lastControlY: 0,
+                startX: 0,
+                startY: 0,
+                lastCommand: "",
+                isFirstContour: true
+            };
 
+            let i = 0;
+            let currentCommand = "";
         }
     }
 
