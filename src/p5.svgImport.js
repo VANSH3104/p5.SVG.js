@@ -606,8 +606,12 @@ export function SVGImportAddon(p5, fn, lifecycles) {
 
         visitPath(node, context) {
             this.shapeBuilder.addPrimitive(context, shape => {
-                const d = node.getAttribute("d") || "";
-                this.buildFromLegacyPath(shape, d);
+                if (typeof node.getPathData === "function") {
+                    this.buildFromPathData(shape, node.getPathData());
+                } else {
+                    const d = node.getAttribute("d") || "";
+                    this.buildFromLegacyPath(shape, d);
+                }
             });
         }
 
@@ -617,6 +621,21 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             } else {
                 shape.rectPrimitive(x, y, w, h);
             }
+        }
+
+        parsePointsAttribute(pointsAttr) {
+            const points = [];
+            const matches = pointsAttr.match(/-?[\d.]+/g);
+            if (matches) {
+                for (let i = 0; i < matches.length - 1; i += 2) {
+                    const x = parseFloat(matches[i]);
+                    const y = parseFloat(matches[i + 1]);
+                    if (!isNaN(x) && !isNaN(y)) {
+                        points.push({ x, y });
+                    }
+                }
+            }
+            return points;
         }
 
         getNativePoints(node) {
@@ -1142,6 +1161,40 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 }
 
                 state.lastCommand = currentCommand;
+            }
+        }
+
+        buildFromPathData(shape, pathData) {
+            const state = {
+                currentX: 0,
+                currentY: 0,
+                lastControlX: 0,
+                lastControlY: 0,
+                startX: 0,
+                startY: 0,
+                lastCommand: '',
+                isFirstContour: true
+            };
+
+            for (const segment of pathData) {
+                const cmd = segment.type;
+                const args = segment.values;
+
+                if (cmd === 'Z' || cmd === 'z') {
+                    shape.endContour(this.p5.CLOSE);
+                    state.currentX = state.startX;
+                    state.currentY = state.startY;
+                    state.lastControlX = state.currentX;
+                    state.lastControlY = state.currentY;
+                    state.lastCommand = cmd;
+                    continue;
+                }
+
+                const handler = PATH_HANDLERS[cmd];
+                if (handler) {
+                    handler.call(this, shape, state, args);
+                }
+                state.lastCommand = cmd;
             }
         }
     }
