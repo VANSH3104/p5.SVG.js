@@ -600,7 +600,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         visitPath(node, context) {
             this.shapeBuilder.addPrimitive(context, shape => {
                 const d = node.getAttribute("d") || "";
-                const tokens = this.parsePathData(d);
+                this.buildFromLegacyPath(shape, d);
             });
         }
 
@@ -630,7 +630,23 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         parsePathData(d) {
 
         }
+
+        buildFromLegacyPath(shape, d) {
+
+        }
     }
+
+     const VISITORS = Object.freeze({
+        svg: SVGImporter.prototype.visitSVG,
+        g: SVGImporter.prototype.visitGroup,
+        circle: SVGImporter.prototype.visitCircle,
+        ellipse: SVGImporter.prototype.visitEllipse,
+        line: SVGImporter.prototype.visitLine,
+        rect: SVGImporter.prototype.visitRect,
+        polygon: SVGImporter.prototype.visitPolygon,
+        polyline: SVGImporter.prototype.visitPolyline,
+        path: SVGImporter.prototype.visitPath,
+    });
 
     function parseSVGText(pInst, svgText) {
         const importer = new SVGImporter(pInst);
@@ -642,17 +658,6 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         return parseSVGText(this, svgText);
     };
 
-    const VISITORS = Object.freeze({
-        svg: SVGImporter.prototype.visitSVG,
-        g: SVGImporter.prototype.visitGroup,
-        circle: SVGImporter.prototype.visitCircle,
-        ellipse: SVGImporter.prototype.visitEllipse,
-        line: SVGImporter.prototype.visitLine,
-        rect: SVGImporter.prototype.visitRect,
-        polygon: SVGImporter.prototype.visitPolygon,
-        polyline: SVGImporter.prototype.visitPolyline,
-        path: SVGImporter.prototype.visitPath,
-    });
 
     fn.loadSVG = async function (
         path,
