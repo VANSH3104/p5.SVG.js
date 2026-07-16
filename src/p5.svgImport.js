@@ -1,26 +1,26 @@
 import { ShapeRecorder, ShapeNode, TransformStack } from "./p5.ShapeRecorder.js";
 
 const PATH_COMMANDS = Object.freeze({
-    M: { count: 2, implicit: "L" },
-    m: { count: 2, implicit: "l" },
-    L: { count: 2, implicit: "L" },
-    l: { count: 2, implicit: "l" },
-    H: { count: 1, implicit: "H" },
-    h: { count: 1, implicit: "h" },
-    V: { count: 1, implicit: "V" },
-    v: { count: 1, implicit: "v" },
-    C: { count: 6, implicit: "C" },
-    c: { count: 6, implicit: "c" },
-    S: { count: 4, implicit: "S" },
-    s: { count: 4, implicit: "s" },
-    Q: { count: 4, implicit: "Q" },
-    q: { count: 4, implicit: "q" },
-    T: { count: 2, implicit: "T" },
-    t: { count: 2, implicit: "t" },
-    A: { count: 7, implicit: "A" },
-    a: { count: 7, implicit: "a" },
-    Z: { count: 0, implicit: "Z" },
-    z: { count: 0, implicit: "z" }
+    M: { args: ["x", "y"], implicit: "L" },
+    m: { args: ["dx", "dy"], implicit: "l" },
+    L: { args: ["x", "y"], implicit: "L" },
+    l: { args: ["dx", "dy"], implicit: "l" },
+    H: { args: ["x"], implicit: "H" },
+    h: { args: ["dx"], implicit: "h" },
+    V: { args: ["y"], implicit: "V" },
+    v: { args: ["dy"], implicit: "v" },
+    C: { args: ["x1", "y1", "x2", "y2", "x", "y"], implicit: "C" },
+    c: { args: ["dx1", "dy1", "dx2", "dy2", "dx", "dy"], implicit: "c" },
+    S: { args: ["x2", "y2", "x", "y"], implicit: "S" },
+    s: { args: ["dx2", "dy2", "dx", "dy"], implicit: "s" },
+    Q: { args: ["x1", "y1", "x", "y"], implicit: "Q" },
+    q: { args: ["dx1", "dy1", "dx", "dy"], implicit: "q" },
+    T: { args: ["x", "y"], implicit: "T" },
+    t: { args: ["dx", "dy"], implicit: "t" },
+    A: { args: ["rx", "ry", "rotation", "largeArc", "sweep", "x", "y"], implicit: "A" },
+    a: { args: ["rx", "ry", "rotation", "largeArc", "sweep", "dx", "dy"], implicit: "a" },
+    Z: { args: [], implicit: "Z" },
+    z: { args: [], implicit: "z" }
 });
 
 const warnedFeatures = new Set();
@@ -640,10 +640,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
 
         emitCubicSegments(shape, segments) {
             for (const seg of segments) {
-                shape.bezierOrder(3);
-                shape.bezierVertex(new p5.Vector(seg.cp1.x, seg.cp1.y));
-                shape.bezierVertex(new p5.Vector(seg.cp2.x, seg.cp2.y));
-                shape.bezierVertex(new p5.Vector(seg.end.x, seg.end.y));
+                this.emitSingleCubic(shape, seg.cp1, seg.cp2, seg.end);
             }
         }
 
@@ -784,9 +781,9 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 if (isCommandChar(char)) {
                     currentCommand = char;
                     argIndexForCommand = 0;
-                    currentCommandObj = { type: char, values: [] };
+                    currentCommandObj = { type: char };
                     const cmdMeta = PATH_COMMANDS[char];
-                    if (cmdMeta && cmdMeta.count === 0) {
+                    if (cmdMeta && cmdMeta.args.length === 0) {
                         commands.push(currentCommandObj);
                         isCurrentCommandObjPushed = true;
                     } else {
@@ -796,9 +793,8 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                     continue;
                 }
 
-                // 2. Otherwise, parse as a number or flag depending on context
-                const isArc = (currentCommand === 'A' || currentCommand === 'a');
-                const isFlag = isArc && (argIndexForCommand === 3 || argIndexForCommand === 4);
+                const argName = PATH_COMMANDS[currentCommand]?.args[argIndexForCommand];
+                const isFlag = argName === "largeArc" || argName === "sweep";
 
                 if (isFlag) {
                     // A flag is just a single character: '0' or '1'
@@ -809,7 +805,8 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                                 commands.push(currentCommandObj);
                                 isCurrentCommandObjPushed = true;
                             }
-                            currentCommandObj.values.push(numVal);
+                            const argName = PATH_COMMANDS[currentCommand].args[argIndexForCommand];
+                            currentCommandObj[argName] = numVal;
                         }
                         argIndexForCommand++;
                         if (argIndexForCommand >= 7) {
@@ -835,19 +832,20 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                                 commands.push(currentCommandObj);
                                 isCurrentCommandObjPushed = true;
                             }
-                            currentCommandObj.values.push(numVal);
+                            const argName = PATH_COMMANDS[currentCommand].args[argIndexForCommand];
+                            currentCommandObj[argName] = numVal;
                         }
 
                         // Update parameter index for the current command
                         if (currentCommand) {
                             const cmdMeta = PATH_COMMANDS[currentCommand];
-                            const totalArgs = cmdMeta ? cmdMeta.count : 0;
+                            const totalArgs = cmdMeta ? cmdMeta.args.length : 0;
                             if (totalArgs > 0) {
                                 argIndexForCommand++;
                                 if (argIndexForCommand >= totalArgs) {
                                     currentCommand = cmdMeta.implicit;
                                     argIndexForCommand = 0;
-                                    currentCommandObj = { type: currentCommand, values: [] };
+                                    currentCommandObj = { type: currentCommand };
                                     isCurrentCommandObjPushed = false;
                                 }
                             }
@@ -860,14 +858,6 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 }
             }
 
-            if (currentCommandObj && isCurrentCommandObjPushed) {
-                const cmdMeta = PATH_COMMANDS[currentCommandObj.type];
-                const count = cmdMeta ? cmdMeta.count : 0;
-                if (currentCommandObj.values.length < count) {
-                    warnOnce("SVG Importer Warning: Malformed SVG path data (insufficient arguments for command).");
-                    commands.pop();
-                }
-            }
 
             return commands;
         }
@@ -987,7 +977,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         // --- Path Geometry Handlers ---
 
         handlePathM(shape, state, args) {
-            const [x, y] = args;
+            const { x, y } = args;
             state.currentX = x;
             state.currentY = y;
             state.startX = state.currentX;
@@ -1002,9 +992,9 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePathm(shape, state, args) {
-            const [x, y] = args;
-            state.currentX += x;
-            state.currentY += y;
+            const { dx, dy } = args;
+            state.currentX += dx;
+            state.currentY += dy;
             state.startX = state.currentX;
             state.startY = state.currentY;
             if (!state.isFirstContour) {
@@ -1017,7 +1007,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePathL(shape, state, args) {
-            const [x, y] = args;
+            const { x, y } = args;
             state.currentX = x;
             state.currentY = y;
             shape.vertex(new p5.Vector(state.currentX, state.currentY));
@@ -1026,16 +1016,16 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePathl(shape, state, args) {
-            const [x, y] = args;
-            state.currentX += x;
-            state.currentY += y;
+            const { dx, dy } = args;
+            state.currentX += dx;
+            state.currentY += dy;
             shape.vertex(new p5.Vector(state.currentX, state.currentY));
             state.lastControlX = state.currentX;
             state.lastControlY = state.currentY;
         }
 
         handlePathH(shape, state, args) {
-            const [x] = args;
+            const {x} = args;
             state.currentX = x;
             shape.vertex(new p5.Vector(state.currentX, state.currentY));
             state.lastControlX = state.currentX;
@@ -1043,15 +1033,15 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePathh(shape, state, args) {
-            const [x] = args;
-            state.currentX += x;
+            const {dx} = args;
+            state.currentX += dx;
             shape.vertex(new p5.Vector(state.currentX, state.currentY));
             state.lastControlX = state.currentX;
             state.lastControlY = state.currentY;
         }
 
         handlePathV(shape, state, args) {
-            const [y] = args;
+            const {y} = args;
             state.currentY = y;
             shape.vertex(new p5.Vector(state.currentX, state.currentY));
             state.lastControlX = state.currentX;
@@ -1059,15 +1049,15 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePathv(shape, state, args) {
-            const [y] = args;
-            state.currentY += y;
+            const {dy} = args;
+            state.currentY += dy;
             shape.vertex(new p5.Vector(state.currentX, state.currentY));
             state.lastControlX = state.currentX;
             state.lastControlY = state.currentY;
         }
 
         handlePathC(shape, state, args) {
-            const [cp1x, cp1y, cp2x, cp2y, endx, endy] = args;
+            const { x1: cp1x, y1: cp1y, x2: cp2x, y2: cp2y, x: endx, y: endy } = args;
             shape.bezierOrder(3);
             shape.bezierVertex(new p5.Vector(cp1x, cp1y));
             shape.bezierVertex(new p5.Vector(cp2x, cp2y));
@@ -1079,13 +1069,13 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePathc(shape, state, args) {
-            const [cp1x, cp1y, cp2x, cp2y, endx, endy] = args;
-            const absCp1x = cp1x + state.currentX;
-            const absCp1y = cp1y + state.currentY;
-            const absCp2x = cp2x + state.currentX;
-            const absCp2y = cp2y + state.currentY;
-            const absEndx = endx + state.currentX;
-            const absEndy = endy + state.currentY;
+            const { dx1: cp1dx, dy1: cp1dy, dx2: cp2dx, dy2: cp2dy, dx: enddx, dy: enddy } = args;
+            const absCp1x = cp1dx + state.currentX;
+            const absCp1y = cp1dy + state.currentY;
+            const absCp2x = cp2dx + state.currentX;
+            const absCp2y = cp2dy + state.currentY;
+            const absEndx = enddx + state.currentX;
+            const absEndy = enddy + state.currentY;
             shape.bezierOrder(3);
             shape.bezierVertex(new p5.Vector(absCp1x, absCp1y));
             shape.bezierVertex(new p5.Vector(absCp2x, absCp2y));
@@ -1097,7 +1087,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePathS(shape, state, args) {
-            const [cp2x, cp2y, endx, endy] = args;
+            const { x2: cp2x, y2: cp2y, x: endx, y: endy } = args;
             let cp1x = state.currentX;
             let cp1y = state.currentY;
             if (state.lastCommand === 'C' || state.lastCommand === 'c' || state.lastCommand === 'S' || state.lastCommand === 's') {
@@ -1115,19 +1105,19 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePaths(shape, state, args) {
-            const [cp2x, cp2y, endx, endy] = args;
-            const absCp2x = cp2x + state.currentX;
-            const absCp2y = cp2y + state.currentY;
-            const absEndx = endx + state.currentX;
-            const absEndy = endy + state.currentY;
-            let cp1x = state.currentX;
-            let cp1y = state.currentY;
+            const { dx2: cp2dx, dy2: cp2dy, dx: enddx, dy: enddy } = args;
+            const absCp2x = cp2dx + state.currentX;
+            const absCp2y = cp2dy + state.currentY;
+            const absEndx = enddx + state.currentX;
+            const absEndy = enddy + state.currentY;
+            let cp1dx = state.currentX;
+            let cp1dy = state.currentY;
             if (state.lastCommand === 'C' || state.lastCommand === 'c' || state.lastCommand === 'S' || state.lastCommand === 's') {
-                cp1x = 2 * state.currentX - state.lastControlX;
-                cp1y = 2 * state.currentY - state.lastControlY;
+                cp1dx = 2 * state.currentX - state.lastControlX;
+                cp1dy = 2 * state.currentY - state.lastControlY;
             }
             shape.bezierOrder(3);
-            shape.bezierVertex(new p5.Vector(cp1x, cp1y));
+            shape.bezierVertex(new p5.Vector(cp1dx, cp1dy));
             shape.bezierVertex(new p5.Vector(absCp2x, absCp2y));
             shape.bezierVertex(new p5.Vector(absEndx, absEndy));
             state.lastControlX = absCp2x;
@@ -1137,7 +1127,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePathQ(shape, state, args) {
-            const [cpx, cpy, endx, endy] = args;
+            const { x1: cpx, y1: cpy, x: endx, y: endy } = args;
             shape.bezierOrder(2);
             shape.bezierVertex(new p5.Vector(cpx, cpy));
             shape.bezierVertex(new p5.Vector(endx, endy));
@@ -1148,11 +1138,11 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePathq(shape, state, args) {
-            const [cpx, cpy, endx, endy] = args;
-            const absCpx = cpx + state.currentX;
-            const absCpy = cpy + state.currentY;
-            const absEndx = endx + state.currentX;
-            const absEndy = endy + state.currentY;
+            const { dx1: cpdx, dy1: cpdy, dx: enddx, dy: enddy } = args;
+            const absCpx = cpdx + state.currentX;
+            const absCpy = cpdy + state.currentY;
+            const absEndx = enddx + state.currentX;
+            const absEndy = enddy + state.currentY;
             shape.bezierOrder(2);
             shape.bezierVertex(new p5.Vector(absCpx, absCpy));
             shape.bezierVertex(new p5.Vector(absEndx, absEndy));
@@ -1163,7 +1153,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePathT(shape, state, args) {
-            const [endx, endy] = args;
+            const { x: endx, y: endy } = args;
             let cpx = state.currentX;
             let cpy = state.currentY;
             if (state.lastCommand === 'Q' || state.lastCommand === 'q' || state.lastCommand === 'T' || state.lastCommand === 't') {
@@ -1180,9 +1170,9 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePatht(shape, state, args) {
-            const [endx, endy] = args;
-            const absEndx = endx + state.currentX;
-            const absEndy = endy + state.currentY;
+            const { dx: enddx, dy: enddy } = args;
+            const absEndx = enddx + state.currentX;
+            const absEndy = enddy + state.currentY;
             let cpx = state.currentX;
             let cpy = state.currentY;
             if (state.lastCommand === 'Q' || state.lastCommand === 'q' || state.lastCommand === 'T' || state.lastCommand === 't') {
@@ -1199,7 +1189,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePathA(shape, state, args) {
-            const [rx, ry, xAxisRotation, largeArcFlag, sweepFlag, endx, endy] = args;
+            const { rx, ry, rotation: xAxisRotation, largeArc: largeArcFlag, sweep: sweepFlag, x: endx, y: endy } = args;
             const segments = this.arcToBezier(state.currentX, state.currentY, rx, ry, xAxisRotation, largeArcFlag, sweepFlag, endx, endy);
             this.emitCubicSegments(shape, segments);
             state.lastControlX = state.currentX = endx;
@@ -1207,9 +1197,9 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         handlePatha(shape, state, args) {
-            const [rx, ry, xAxisRotation, largeArcFlag, sweepFlag, endx, endy] = args;
-            const absEndx = endx + state.currentX;
-            const absEndy = endy + state.currentY;
+            const { rx, ry, rotation: xAxisRotation, largeArc: largeArcFlag, sweep: sweepFlag, dx: enddx, dy: enddy } = args;
+            const absEndx = enddx + state.currentX;
+            const absEndy = enddy + state.currentY;
             const segments = this.arcToBezier(state.currentX, state.currentY, rx, ry, xAxisRotation, largeArcFlag, sweepFlag, absEndx, absEndy);
             this.emitCubicSegments(shape, segments);
             state.lastControlX = state.currentX = absEndx;
@@ -1230,7 +1220,6 @@ export function SVGImportAddon(p5, fn, lifecycles) {
 
             for (const cmdObj of commands) {
                 const cmd = cmdObj.type;
-                const args = cmdObj.values;
 
                 if (cmd === 'Z' || cmd === 'z') {
                     shape.endContour(this.p5.CLOSE);
@@ -1244,7 +1233,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
 
                 const handler = PATH_HANDLERS[cmd];
                 if (handler) {
-                    handler.call(this, shape, state, args);
+                    handler.call(this, shape, state, cmdObj);
                 }
                 state.lastCommand = cmd;
             }
@@ -1256,11 +1245,16 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
         buildFromPathData(shape, pathData) {
-            const commands = pathData.map(cmd => ({
-                type: cmd.type,
-                values: [...cmd.values],
-            }));
-            this.buildFromCommands(shape, pathData);
+            const commands = pathData.map(cmd => {
+                const command = { type: cmd.type };
+                const argNames = PATH_COMMANDS[cmd.type].args;
+
+                argNames.forEach((name, i) => {
+                    command[name] = cmd.values[i];
+                });
+                return command;
+            });
+            this.buildFromCommands(shape, commands);
         }
     }
 
