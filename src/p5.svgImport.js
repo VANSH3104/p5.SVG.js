@@ -310,6 +310,23 @@ function parseLength(val, defaultValue) {
     return num; // Simplified - just return the number
 }
 
+function resolvePairedRadii(rx, ry) {
+    const hasValidRx = rx !== null && rx !== undefined && !isNaN(rx) && rx >= 0;
+    const hasValidRy = ry !== null && ry !== undefined && !isNaN(ry) && ry >= 0;
+
+    let resolvedRx = rx;
+    let resolvedRy = ry;
+
+    if (!hasValidRx && !hasValidRy) {
+        resolvedRx = 0;
+        resolvedRy = 0;
+    } else if (hasValidRx && !hasValidRy) {
+        resolvedRy = resolvedRx;
+    } else if (!hasValidRx && hasValidRy) {
+        resolvedRx = resolvedRy;
+    }
+    return { rx: resolvedRx, ry: resolvedRy };
+}
 
 export function SVGImportAddon(p5, fn, lifecycles) {
     class ShapeBuilder {
@@ -362,9 +379,6 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             };
         }
 
-        // p5.Shape and p5.Vector are class-level (namespace) properties, not
-        // instance properties, so they must come from the SVGImportAddon
-        // closure's `p5` parameter rather than from `this.p5` (the sketch instance).
         createShape(builder) {
             const shape = new p5.Shape({
                 position: new p5.Vector(0, 0)
@@ -373,6 +387,17 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             builder(shape);
             shape.endShape();
             return shape;
+        }
+
+        addPrimitive(context, builder) {
+            if (context.visibility === "hidden" || context.visibility === "collapse") {
+                return;
+            }
+            const shape = this.createShape(builder);
+            const state = this.captureState(context);
+            this.recorder.addNode(
+                new ShapeNode(shape, state)
+            );
         }
 
         emitShape(shape, context) {
@@ -429,6 +454,10 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             if (!node) {
                 return;
             }
+            const visitor = VISITORS[node.localName];
+            if (!visitor) {
+                return;
+            }
             this.tStack.push();
             this.transformResolver.apply(node, this.tStack);
             const parentContext = this.currentRenderContext;
@@ -440,38 +469,21 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 this.tStack.pop();
                 return;
             }
+            visitor.call(this, node, context);
 
-            const tag = node.localName;
-            switch (tag) {
-                case "svg": {
-                    this.visitSVG(node);
-                    break;
-                }
-                case "g": {
-                    this.visitGroup(node);
-                    break;
-                }
-                case "circle": {
-                    if (context.visibility === "visible") {
-                        this.visitCircle(node, context);
-                    }
-                    break;
-                }
-                case "ellipse": {
-                    if (context.visibility === "visible") {
-                        this.visitEllipse(node, context);
-                    }
-                    break;
-                }
-                case "rect": {
-                    if (context.visibility === "visible") {
-                        this.visitRect(node, context);
-                    }
-                    break;
-                }
-            }
             this.renderContextStack.pop();
             this.tStack.pop();
+        }
+
+        num(node, attr, fallback = 0) {
+            if (!node.hasAttribute(attr)) {
+                return fallback;
+            }
+            if (node[attr] && node[attr].baseVal) {
+                return node[attr].baseVal.value;
+            }
+            const val = node.getAttribute(attr);
+            return parseLength(val, fallback);
         }
 
         visitSVG(node) {
@@ -493,68 +505,119 @@ export function SVGImportAddon(p5, fn, lifecycles) {
 
       
         visitCircle(node, context) {
-            const r = Number(node.getAttribute("r")) || 0;
+            const r = this.num(node, "r");
+            if (r <= 0) return;
 
-            this.addEllipse(
-                Number(node.getAttribute("cx")) || 0,
-                Number(node.getAttribute("cy")) || 0,
-                r,
-                r,
-                context
-            );
+            this.shapeBuilder.addPrimitive(context, shape => {
+                shape.ellipsePrimitive(
+                    this.num(node, "cx") - r,
+                    this.num(node, "cy") - r,
+                    r * 2,
+                    r * 2
+                );
+            });
         }
 
         visitEllipse(node, context) {
-            this.addEllipse(
-                Number(node.getAttribute("cx")) || 0,
-                Number(node.getAttribute("cy")) || 0,
-                Number(node.getAttribute("rx")) || 0,
-                Number(node.getAttribute("ry")) || 0,
-                context
-            );
-        }
+            const rx = this.num(node, "rx", NaN);
+            const ry = this.num(node, "ry", NaN);
 
-        addEllipse(cx, cy, rx, ry, context) {
-            const shape = this.shapeBuilder.createShape(shape => {
+            const { rx: resolvedRx, ry: resolvedRy } = resolvePairedRadii(rx, ry);
+
+            if (resolvedRx <= 0 || resolvedRy <= 0) return;
+            this.shapeBuilder.addPrimitive(context, shape => {
                 shape.ellipsePrimitive(
-                    cx - rx,
-                    cy - ry,
-                    rx * 2,
-                    ry * 2
+                    this.num(node, "cx") - resolvedRx,
+                    this.num(node, "cy") - resolvedRy,
+                    resolvedRx * 2,
+                    resolvedRy * 2
                 );
             });
-            this.shapeBuilder.emitShape(shape, context);
         }
-        visitRect(node, context) {
-            const x = Number(node.getAttribute("x")) || 0;
-            const y = Number(node.getAttribute("y")) || 0;
-            const w = Number(node.getAttribute("width")) || 0;
-            const h = Number(node.getAttribute("height")) || 0;
-            
-            // Get corner radii
-            const rx = Number(node.getAttribute("rx")) || 0;
-            const ry = Number(node.getAttribute("ry")) || 0;
 
+        visitLine(node, context) {
+            this.shapeBuilder.addPrimitive(context, shape => {
+                shape.line(
+                    this.num(node, "x1"),
+                    this.num(node, "y1"),
+                    this.num(node, "x2"),
+                    this.num(node, "y2")
+                );
+            });
+        }
+
+        visitRect(node, context) {
+            const w = this.num(node, "width");
+            const h = this.num(node, "height");
             if (w <= 0 || h <= 0) return;
 
-            // Clamp radii to at most half of the respective side length
-            const resolvedRx = Math.min(rx, w / 2);
-            const resolvedRy = Math.min(ry, h / 2);
+            const rx = this.num(node, "rx", null);
+            const ry = this.num(node, "ry", null);
 
-            const shape = this.shapeBuilder.createShape(shape => {
-                if (resolvedRx > 0 || resolvedRy > 0) {
-                    // Use rounded rect with corner radii
-                    const r = Math.min(resolvedRx, resolvedRy);
-                    shape.rectPrimitive(x, y, w, h, r, r, r, r);
-                } else {
-                    // Simple rect
-                    shape.rectPrimitive(x, y, w, h);
+            const { rx: resolvedRx, ry: resolvedRy } = resolvePairedRadii(rx, ry);
+
+            const x = this.num(node, "x");
+            const y = this.num(node, "y");
+
+            let clampedRx = Math.max(0, Math.min(resolvedRx, w / 2));
+            let clampedRy = Math.max(0, Math.min(resolvedRy, h / 2));
+            if (clampedRx === 0 || clampedRy === 0) {
+                clampedRx = 0;
+                clampedRy = 0;
+            }
+
+            if (clampedRx > 0 && clampedRy > 0 && clampedRx !== clampedRy) {
+                // for rounded rect 
+            } else {
+                this.shapeBuilder.addPrimitive(context, shape => {
+                    this.buildSimpleRect(shape, x, y, w, h, clampedRx);
+                });
+            }
+        }
+
+        visitPolygon(node, context) {
+            const points = this.getNativePoints(node);
+            this.shapeBuilder.addPrimitive(context, shape => {
+                for (const pt of points) {
+                    shape.vertex(new p5.Vector(pt.x, pt.y));
+                }
+                shape.endShape(this.p5.CLOSE);
+            });
+        }
+
+        visitPolyline(node, context) {
+            const points = this.getNativePoints(node);
+            this.shapeBuilder.addPrimitive(context, shape => {
+                for (const pt of points) {
+                    shape.vertex(new p5.Vector(pt.x, pt.y));
                 }
             });
-            
-            this.shapeBuilder.emitShape(shape, context);
+        }
+
+        buildSimpleRect(shape, x, y, w, h, r) {
+            if (r > 0) {
+                shape.rectPrimitive(x, y, w, h, r, r, r, r);
+            } else {
+                shape.rectPrimitive(x, y, w, h);
+            }
+        }
+
+        getNativePoints(node) {
+            const list = node.points;
+            if (list && list.numberOfItems > 0) {
+                const points = [];
+                for (let i = 0; i < list.numberOfItems; i++) {
+                    const pt = list.getItem(i);
+                    points.push({ x: pt.x, y: pt.y });
+                }
+                return points;
+            }
+
+            const pointsAttr = node.getAttribute("points");
+            return pointsAttr ? this.parsePointsAttribute(pointsAttr) : [];
         }
     }
+
     function parseSVGText(pInst, svgText) {
         const importer = new SVGImporter(pInst);
         return importer.import(svgText);
@@ -564,6 +627,17 @@ export function SVGImportAddon(p5, fn, lifecycles) {
     fn.parseSVG = function (svgText) {
         return parseSVGText(this, svgText);
     };
+
+    const VISITORS = Object.freeze({
+        svg: SVGImporter.prototype.visitSVG,
+        g: SVGImporter.prototype.visitGroup,
+        circle: SVGImporter.prototype.visitCircle,
+        ellipse: SVGImporter.prototype.visitEllipse,
+        line: SVGImporter.prototype.visitLine,
+        rect: SVGImporter.prototype.visitRect,
+        polygon: SVGImporter.prototype.visitPolygon,
+        polyline: SVGImporter.prototype.visitPolyline,
+    });
 
     fn.loadSVG = async function (
         path,
