@@ -926,7 +926,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
     URL.revokeObjectURL(url);
   };
-  fn.saveAsSVG = fn.saveSVG;
+
 };
 
 if (typeof p5 !== 'undefined') {
