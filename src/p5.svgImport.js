@@ -475,6 +475,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             try {
                 host.appendChild(svg);
                 this.styleResolver.preprocess(svg);
+                this.collectDefinitions(svg);
                 this.visit(host.firstChild);
             } finally {
                 host.remove();
@@ -483,6 +484,16 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             record.sourceSVG = svg.cloneNode(true);
             return record;
         }
+
+        collectDefinitions(node) {
+            if (node.id && !this.definitions.has(node.id)) {
+                this.definitions.set(node.id, node);
+            }
+            for (const child of node.children) {
+                this.collectDefinitions(child);
+            }
+        }
+
         visit(node) {
             if (!node) {
                 return;
