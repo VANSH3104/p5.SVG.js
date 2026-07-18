@@ -450,6 +450,8 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 this.recorder,
                 this.tStack
             );
+            this.definitions = new Map();
+            this.activeRefs = new Set();
         }
 
         get currentRenderContext() {
@@ -504,6 +506,18 @@ export function SVGImportAddon(p5, fn, lifecycles) {
 
             this.renderContextStack.pop();
             this.tStack.pop();
+        }
+
+        withRefGuard(refId, fn) {
+            if (this.activeRefs.has(refId)) {
+                return; // cycle detected — bail silently
+            }
+            this.activeRefs.add(refId);
+            try {
+                fn();
+            } finally {
+                this.activeRefs.delete(refId);
+            }
         }
 
         num(node, attr, fallback = 0) {
