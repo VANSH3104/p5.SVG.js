@@ -1309,6 +1309,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
      const VISITORS = Object.freeze({
         svg: SVGImporter.prototype.visitSVG,
         g: SVGImporter.prototype.visitGroup,
+        symbol: SVGImporter.prototype.visitGroup,
         circle: SVGImporter.prototype.visitCircle,
         ellipse: SVGImporter.prototype.visitEllipse,
         line: SVGImporter.prototype.visitLine,
