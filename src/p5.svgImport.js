@@ -561,6 +561,28 @@ export function SVGImportAddon(p5, fn, lifecycles) {
 
         visitDefs() {}
 
+        visitUse(node) {
+            const href = node.getAttribute("href") || node.getAttribute("xlink:href");
+            if (!href || !href.startsWith("#")) {
+                return;
+            }
+
+            const refId = href.slice(1);
+            const referenced = this.definitions.get(refId);
+            if (!referenced) {
+                return;
+            }
+
+            this.withRefGuard(refId, () => {
+                const x = this.num(node, "x");
+                const y = this.num(node, "y");
+                if (x !== 0 || y !== 0) {
+                    this.tStack.current.translateSelf(x, y);
+                }
+                this.visit(referenced);
+            });
+        }
+
         visitCircle(node, context) {
             const r = this.num(node, "r");
             if (r <= 0) return;
@@ -1294,7 +1316,8 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         polygon: SVGImporter.prototype.visitPolygon,
         polyline: SVGImporter.prototype.visitPolyline,
         path: SVGImporter.prototype.visitPath,
-        defs: SVGImporter.prototype.visitDefs
+        defs: SVGImporter.prototype.visitDefs,
+        use: SVGImporter.prototype.visitUse,
     });
 
     const PATH_HANDLERS = Object.freeze({
