@@ -24,7 +24,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
           renderer.drawShape = function (shape) {
             if (recorder.active) {
               recorder.addNode(
-                new ShapeNode(shape, recorder.p5._svgCaptureState())
+                new ShapeNode(shape, recorder.p5._svgCaptureState(recorder))
               );
               if (p5.Shape) {
                 renderer._currentShape = new p5.Shape(renderer.getCommonVertexProperties());
@@ -105,7 +105,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
                 new ImageNode(
                   img,
                   [sx, sy, sw, sh, dx, dy, dw, dh],
-                  recorder.p5._svgCaptureState()
+                  recorder.p5._svgCaptureState(recorder)
                 )
               );
               if (!recorder.draw) {
@@ -123,8 +123,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     }
   }
 
-  fn._svgCaptureState = function () {
-    const recorder = this._activeRecorder;
+  fn._svgCaptureState = function (recorder) {
     const states = this._renderer.states;
     return {
       transform: recorder ? new DOMMatrix(
@@ -137,6 +136,43 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     };
   };
 
+
+  // ---------------------------------------------------
+  // RecordedShape Class
+  // ---------------------------------------------------
+
+  class RecordedShape {
+    constructor(pInst) {
+      this.p5 = pInst;
+      this.recorder = undefined;
+      this.data = null;
+    }
+
+    begin(options = {}) {
+      this.recorder = new ShapeRecorder(this.p5, {
+        draw: options ? (options.draw ?? false) : false
+      });
+      this.p5.push();
+      this.recorder.start();
+    }
+
+    end() {
+      if (!this.recorder) {
+        console.warn('end() called without a matching begin().');
+        return;
+      }
+      this.recorder.stop();
+      this.data = this.recorder.getRecord();
+      delete this.recorder;
+      this.p5.pop();
+    }
+
+    toSVGElement(visitor) {
+      if (this.data) {
+        this.data.toSVGElement(visitor);
+      }
+    }
+  }
 
   // ---------------------------------------------------
   // SVG Visitor
@@ -739,7 +775,11 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
     replay(record) {
       if (!record) return;
-      this.replayScope(record);
+      if (record instanceof RecordedShape) {
+        this.replayScope(record.data);
+      } else {
+        this.replayScope(record);
+      }
     }
 
     replayScope(scope) {
@@ -836,46 +876,21 @@ export function SVGExportAddon(p5, fn, lifecycles) {
   // API
   // ---------------------------------------------------
 
+  fn.createShape = function () {
+    return new RecordedShape(this);
+  };
+
   fn.buildShape = function (callback, options = {}) {
-    const recorder = new ShapeRecorder(this, {
-      draw: options.draw ?? false
-    });
-    this._activeRecorder = recorder;
-    this.push();
-    recorder.start();
+    const shape = this.createShape();
+    shape.begin(options);
     try {
       if (typeof callback === 'function') {
         callback();
       }
     } finally {
-      recorder.stop();
-      this._activeRecorder = null;
-      this.pop();
+      shape.end();
     }
-    return recorder.getRecord();
-  };
-
-  fn.beginRecord = function () {
-    if (this._activeRecorder) {
-      console.warn('beginRecord() called while already recording. Stopping previous recording.');
-      this._activeRecorder.stop();
-    }
-    const recorder = new ShapeRecorder(this, {
-      draw: true
-    });
-    this._activeRecorder = recorder;
-    recorder.start();
-  };
-
-  fn.endRecord = function () {
-    const recorder = this._activeRecorder;
-    if (!recorder) {
-      console.warn('endRecord() called without a matching beginRecord().');
-      return null;
-    }
-    recorder.stop();
-    this._activeRecorder = null;
-    return recorder.getRecord();
+    return shape;
   };
 
   fn.getSVG = function (record) {
