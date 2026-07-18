@@ -1361,15 +1361,16 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         a: SVGImporter.prototype.handlePatha,
     });
 
-    function parseSVGText(pInst, svgText) {
+    function createSVGText(pInst, svgText) {
         const importer = new SVGImporter(pInst);
         return importer.import(svgText);
     }
 
     // SVG IMPORT api
-    fn.parseSVG = function (svgText) {
-        return parseSVGText(this, svgText);
+    fn.createSVG = function (svgText) {
+        return createSVGText(this, svgText);
     };
+
 
 
     fn.loadSVG = async function (
@@ -1393,7 +1394,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 }
                 svgText = await response.text();
             }
-            const shape = parseSVGText(this, svgText);
+            const shape = createSVGText(this, svgText);
             const cb = () => {
                 if (successCallback) {
                     return successCallback(shape);
