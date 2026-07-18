@@ -559,7 +559,8 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
 
-      
+        visitDefs() {}
+
         visitCircle(node, context) {
             const r = this.num(node, "r");
             if (r <= 0) return;
@@ -1293,6 +1294,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         polygon: SVGImporter.prototype.visitPolygon,
         polyline: SVGImporter.prototype.visitPolyline,
         path: SVGImporter.prototype.visitPath,
+        defs: SVGImporter.prototype.visitDefs
     });
 
     const PATH_HANDLERS = Object.freeze({
