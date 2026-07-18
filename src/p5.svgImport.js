@@ -475,7 +475,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             try {
                 host.appendChild(svg);
                 this.styleResolver.preprocess(svg);
-                this.collectDefinitions(svg);
+                this.buildIdMap(svg);
                 this.visit(host.firstChild);
             } finally {
                 host.remove();
@@ -485,12 +485,12 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             return record;
         }
 
-        collectDefinitions(node) {
+        buildIdMap(node) {
             if (node.id && !this.definitions.has(node.id)) {
                 this.definitions.set(node.id, node);
             }
             for (const child of node.children) {
-                this.collectDefinitions(child);
+                this.buildIdMap(child);
             }
         }
 
@@ -559,7 +559,10 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
 
-        visitDefs() {}
+        visitDefs() {
+            // Definitions are collected during preprocessing.
+            // Rendering happens when referenced via <use>.
+        }
 
         visitUse(node) {
             const href = node.getAttribute("href") || node.getAttribute("xlink:href");
@@ -578,6 +581,22 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 const y = this.num(node, "y");
                 if (x !== 0 || y !== 0) {
                     this.tStack.current.translateSelf(x, y);
+                }
+                const vb = referenced.viewBox?.baseVal;
+                if (vb && vb.width && vb.height) {
+                    const w = node.hasAttribute("width")
+                        ? this.num(node, "width")
+                        : (referenced.width?.baseVal?.value || vb.width);
+                    const h = node.hasAttribute("height")
+                        ? this.num(node, "height")
+                        : (referenced.height?.baseVal?.value || vb.height);
+
+                    const scale = Math.min(w / vb.width, h / vb.height); // default: xMidYMid meet
+                    this.tStack.current.translateSelf(
+                        (w - vb.width * scale) / 2 - vb.x * scale,
+                        (h - vb.height * scale) / 2 - vb.y * scale
+                    );
+                    this.tStack.current.scaleSelf(scale, scale);
                 }
                 this.visit(referenced);
             });
