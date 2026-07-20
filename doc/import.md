@@ -134,11 +134,9 @@ async function setup() {
     circle.setAttribute('stroke', '#000000');
   });
 
-  // 4. Serialize the modified DOM and re-import/parse it to a new RecordedShape
-  const serializer = new XMLSerializer();
-  const modifiedSvgText = serializer.serializeToString(svgDom);
-  
-  botLogo = createSVG(modifiedSvgText);
+  // 4. Re-import the modified SVG DOM
+  botLogo = createSVG(svgDom);
+
 }
 
 function draw() {
