@@ -58,21 +58,26 @@ function draw() {
 
 ---
 
-## 2. Importing from String (`createSVG`)
+## 2. Importing from String or DOM (`createSVG`)
 
-If you have SVG source code as a text string (e.g. from an API response, user input, or hardcoded), you can parse it synchronously using `createSVG()`.
+If you have SVG content already available — either as a raw text string (e.g. from an API response, user input, or hardcoded markup) or as a live browser DOM element — you can parse it synchronously using `createSVG()`.
 
 ### API Signature
 ```js
-createSVG(svgText)
+createSVG(svgSource)
 ```
-* **`svgText`** `(String)`: The raw SVG source code.
+* **`svgSource`** `(String | SVGElement)`: Either:
+  * A **raw SVG string** — the full SVG source code as text, or
+  * An **SVG DOM element** — a browser `SVGElement` (e.g. obtained from `document.querySelector('svg')` or from `recordedShape.sourceSVG`).
 * **Returns**: A `RecordedShape` object containing the parsed shape tree.
+
+> [!NOTE]
+> `createSVG` is **synchronous** — no `await` needed. Use it when you already have the SVG content in memory. For loading from a file or URL, use `loadSVG` instead.
 
 ### Examples
 
 <details>
-<summary><b>Example: Synchronously parsing and drawing inline SVG</b></summary>
+<summary><b>Example: Parsing an inline SVG string</b></summary>
 
 ```js
 const inlineSvg = `
@@ -86,15 +91,13 @@ let importedShape;
 
 function setup() {
   createCanvas(400, 400);
-  
-  // Parse inline SVG text
+
+  // Parse the SVG string directly — no async needed
   importedShape = createSVG(inlineSvg);
 }
 
 function draw() {
   background(240);
-  
-  // Render the imported SVG
   shape(importedShape);
 }
 ```
