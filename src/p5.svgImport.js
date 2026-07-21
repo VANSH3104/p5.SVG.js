@@ -459,12 +459,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 this.renderContextStack.length - 1
             ];
         }
-        import(svgText) {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(svgText, "image/svg+xml");
-
-            const svg = doc.documentElement;
-
+        import(svg) {
             const host = document.createElement("div");
             host.style.position = "absolute";
             host.style.left = "-99999px";
@@ -1361,14 +1356,23 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         a: SVGImporter.prototype.handlePatha,
     });
 
-    function createSVGText(pInst, svgText) {
+    function createSVGText(pInst, input) {
+        let svg;
+
+        if (typeof input === "string") {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(input, "image/svg+xml");
+            svg = doc.documentElement;
+        } else {
+            svg = input;
+        }
         const importer = new SVGImporter(pInst);
-        return importer.import(svgText);
+        return importer.import(svg);
     }
 
     // SVG IMPORT api
-    fn.createSVG = function (svgText) {
-        return createSVGText(this, svgText);
+    fn.createSVG = function (input) {
+        return createSVGText(this, input);
     };
 
 
