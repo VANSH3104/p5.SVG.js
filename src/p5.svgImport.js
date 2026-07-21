@@ -450,6 +450,8 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 this.recorder,
                 this.tStack
             );
+            this.definitions = new Map();
+            this.activeRefs = new Set();
         }
 
         get currentRenderContext() {
@@ -473,6 +475,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             try {
                 host.appendChild(svg);
                 this.styleResolver.preprocess(svg);
+                this.buildIdMap(svg);
                 this.visit(host.firstChild);
             } finally {
                 host.remove();
@@ -481,6 +484,16 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             record.sourceSVG = svg.cloneNode(true);
             return record;
         }
+
+        buildIdMap(node) {
+            if (node.id && !this.definitions.has(node.id)) {
+                this.definitions.set(node.id, node);
+            }
+            for (const child of node.children) {
+                this.buildIdMap(child);
+            }
+        }
+
         visit(node) {
             if (!node) {
                 return;
@@ -504,6 +517,18 @@ export function SVGImportAddon(p5, fn, lifecycles) {
 
             this.renderContextStack.pop();
             this.tStack.pop();
+        }
+
+        withRefGuard(refId, fn) {
+            if (this.activeRefs.has(refId)) {
+                return; // cycle detected — bail silently
+            }
+            this.activeRefs.add(refId);
+            try {
+                fn();
+            } finally {
+                this.activeRefs.delete(refId);
+            }
         }
 
         num(node, attr, fallback = 0) {
@@ -534,7 +559,49 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         }
 
 
-      
+        visitDefs() {
+            // Definitions are collected during preprocessing.
+            // Rendering happens when referenced via <use>.
+        }
+
+        visitUse(node) {
+            const href = node.getAttribute("href") || node.getAttribute("xlink:href");
+            if (!href || !href.startsWith("#")) {
+                return;
+            }
+
+            const refId = href.slice(1);
+            const referenced = this.definitions.get(refId);
+            if (!referenced) {
+                return;
+            }
+
+            this.withRefGuard(refId, () => {
+                const x = this.num(node, "x");
+                const y = this.num(node, "y");
+                if (x !== 0 || y !== 0) {
+                    this.tStack.current.translateSelf(x, y);
+                }
+                const vb = referenced.viewBox?.baseVal;
+                if (vb && vb.width && vb.height) {
+                    const w = node.hasAttribute("width")
+                        ? this.num(node, "width")
+                        : (referenced.width?.baseVal?.value || vb.width);
+                    const h = node.hasAttribute("height")
+                        ? this.num(node, "height")
+                        : (referenced.height?.baseVal?.value || vb.height);
+
+                    const scale = Math.min(w / vb.width, h / vb.height); // default: xMidYMid meet
+                    this.tStack.current.translateSelf(
+                        (w - vb.width * scale) / 2 - vb.x * scale,
+                        (h - vb.height * scale) / 2 - vb.y * scale
+                    );
+                    this.tStack.current.scaleSelf(scale, scale);
+                }
+                this.visit(referenced);
+            });
+        }
+
         visitCircle(node, context) {
             const r = this.num(node, "r");
             if (r <= 0) return;
@@ -1261,6 +1328,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
      const VISITORS = Object.freeze({
         svg: SVGImporter.prototype.visitSVG,
         g: SVGImporter.prototype.visitGroup,
+        symbol: SVGImporter.prototype.visitGroup,
         circle: SVGImporter.prototype.visitCircle,
         ellipse: SVGImporter.prototype.visitEllipse,
         line: SVGImporter.prototype.visitLine,
@@ -1268,6 +1336,8 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         polygon: SVGImporter.prototype.visitPolygon,
         polyline: SVGImporter.prototype.visitPolyline,
         path: SVGImporter.prototype.visitPath,
+        defs: SVGImporter.prototype.visitDefs,
+        use: SVGImporter.prototype.visitUse,
     });
 
     const PATH_HANDLERS = Object.freeze({
@@ -1291,15 +1361,16 @@ export function SVGImportAddon(p5, fn, lifecycles) {
         a: SVGImporter.prototype.handlePatha,
     });
 
-    function parseSVGText(pInst, svgText) {
+    function createSVGText(pInst, svgText) {
         const importer = new SVGImporter(pInst);
         return importer.import(svgText);
     }
 
     // SVG IMPORT api
-    fn.parseSVG = function (svgText) {
-        return parseSVGText(this, svgText);
+    fn.createSVG = function (svgText) {
+        return createSVGText(this, svgText);
     };
+
 
 
     fn.loadSVG = async function (
@@ -1323,7 +1394,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 }
                 svgText = await response.text();
             }
-            const shape = parseSVGText(this, svgText);
+            const shape = createSVGText(this, svgText);
             const cb = () => {
                 if (successCallback) {
                     return successCallback(shape);
