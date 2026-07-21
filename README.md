@@ -7,7 +7,7 @@ Native SVG export and import support for p5.js using the Shape system and Primit
 
 This project is being developed as a GSoC 2026 project and focuses on building a retained rendering pipeline for exporting and importing p5.js sketches as scalable SVG documents.
 
-Try it live in the [p5.js Web Editor](https://editor.p5js.org/vanshkabra05/full/45caLrfVy).
+Try it live in the [p5.js Web Editor](https://editor.p5js.org/vanshkabra05/collections/zFSI0veVz).
 
 ---
 
