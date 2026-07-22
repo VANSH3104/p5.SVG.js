@@ -82,19 +82,19 @@ suite('ShapeRecorder', function() {
       pInst.clear();
     });
 
-    assert.strictEqual(record.type, 'scope');
-    assert.strictEqual(record.children.length, 3);
+    assert.strictEqual(record.data.type, 'scope');
+    assert.strictEqual(record.data.children.length, 3);
 
-    const bgNode = record.children[0];
+    const bgNode = record.data.children[0];
     assert.strictEqual(bgNode.type, 'background');
     assert.isDefined(bgNode.color);
 
-    const shapeNode = record.children[1];
+    const shapeNode = record.data.children[1];
     assert.strictEqual(shapeNode.type, 'shape');
     assert.strictEqual(shapeNode.shape, shape);
     assert.strictEqual(shapeNode.state.fill, 'red');
 
-    const clearNode = record.children[2];
+    const clearNode = record.data.children[2];
     assert.strictEqual(clearNode.type, 'clear');
   });
 
@@ -116,11 +116,11 @@ suite('ShapeRecorder', function() {
     });
 
     // Root scope
-    assert.strictEqual(record.type, 'scope');
-    assert.strictEqual(record.children.length, 1);
+    assert.strictEqual(record.data.type, 'scope');
+    assert.strictEqual(record.data.children.length, 1);
 
     // First push ScopeNode
-    const scope1 = record.children[0];
+    const scope1 = record.data.children[0];
     assert.strictEqual(scope1.type, 'scope');
     assert.strictEqual(scope1.children.length, 2);
 
@@ -151,10 +151,10 @@ suite('ShapeRecorder', function() {
       pInst.pop();
     });
 
-    assert.strictEqual(record.type, 'scope');
-    assert.strictEqual(record.children.length, 1); // Only the push ScopeNode is added to children
+    assert.strictEqual(record.data.type, 'scope');
+    assert.strictEqual(record.data.children.length, 1); // Only the push ScopeNode is added to children
 
-    const childScope = record.children[0];
+    const childScope = record.data.children[0];
     assert.strictEqual(childScope.type, 'scope');
     assert.strictEqual(childScope.children.length, 1);
 
@@ -197,7 +197,7 @@ suite('ShapeRecorder', function() {
     assert.strictEqual(pInst.translate, origTranslate);
   });
 
-  test('should cleanup intercepted methods on endRecord', function() {
+  test('should cleanup intercepted methods on shape.end', function() {
     const pInst = createPInst();
 
     // Preserve original references for verification
@@ -206,16 +206,17 @@ suite('ShapeRecorder', function() {
     const origPop = pInst.pop;
     const origTranslate = pInst.translate;
 
-    pInst.beginRecord();
+    const shapeObj = pInst.createShape();
+    shapeObj.begin();
     // During recording, methods should be wrapped
     assert.notStrictEqual(pInst._renderer.drawShape, origDrawShape);
     assert.notStrictEqual(pInst.push, origPush);
     assert.notStrictEqual(pInst.pop, origPop);
     assert.notStrictEqual(pInst.translate, origTranslate);
 
-    pInst.endRecord();
+    shapeObj.end();
 
-    // After endRecord, functions should be restored
+    // After shape.end, functions should be restored
     assert.strictEqual(pInst._renderer.drawShape, origDrawShape);
     assert.strictEqual(pInst.push, origPush);
     assert.strictEqual(pInst.pop, origPop);
@@ -247,10 +248,10 @@ suite('ShapeRecorder', function() {
     });
 
     // Verify first buildShape recorded correctly
-    assert.strictEqual(reusable.type, 'scope');
-    assert.strictEqual(reusable.children.length, 1);
-    assert.strictEqual(reusable.children[0].type, 'shape');
-    assert.strictEqual(reusable.children[0].shape.name, 'shapeA');
+    assert.strictEqual(reusable.data.type, 'scope');
+    assert.strictEqual(reusable.data.children.length, 1);
+    assert.strictEqual(reusable.data.children[0].type, 'shape');
+    assert.strictEqual(reusable.data.children[0].shape.name, 'shapeA');
 
     // Build outer shape that reuses the first shape via pInst.shape()
     const parentRecord = pInst.buildShape(() => {
@@ -258,10 +259,10 @@ suite('ShapeRecorder', function() {
     });
 
     // Verify outer record contains nested scope representing the replayed shape
-    assert.strictEqual(parentRecord.type, 'scope');
-    assert.strictEqual(parentRecord.children.length, 1);
+    assert.strictEqual(parentRecord.data.type, 'scope');
+    assert.strictEqual(parentRecord.data.children.length, 1);
     
-    const nestedScope = parentRecord.children[0];
+    const nestedScope = parentRecord.data.children[0];
     assert.strictEqual(nestedScope.type, 'scope');
     assert.strictEqual(nestedScope.children.length, 1);
     
@@ -279,7 +280,7 @@ suite('ShapeRecorder', function() {
       record = pInst.buildShape();
     });
 
-    assert.strictEqual(record.type, 'scope');
-    assert.strictEqual(record.children.length, 0);
+    assert.strictEqual(record.data.type, 'scope');
+    assert.strictEqual(record.data.children.length, 0);
   });
 });
