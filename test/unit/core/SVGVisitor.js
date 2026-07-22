@@ -547,3 +547,82 @@ suite('SVGVisitor', function() {
     assert.strictEqual(quadStripEl.getAttribute('d'), 'M 0 0 L 0 10 L 10 10 L 10 0 Z');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scope-level transform — visitScope wrapping behaviour
+// ─────────────────────────────────────────────────────────────────────────────
+
+suite('visitScope — scope transform', function () {
+
+  // Helper: build a minimal ScopeNode and call visitScope on a fresh visitor.
+  // Returns the visitor so callers can inspect its svgElement.
+  function visitScopeWith(transform, buildChildren) {
+    const pInst = createPInst();
+    const visitor = createVisitor(pInst);
+
+    // Give the visitor a non-null currentState so _applyStyle doesn't throw.
+    visitor.currentState = {
+      fill: createMockColor(255, 0, 0, 255, '#ff0000'),
+      stroke: null,
+      strokeWeight: 1
+    };
+
+    const scope = {
+      transform,
+      children: []
+    };
+
+    if (typeof buildChildren === 'function') {
+      buildChildren(scope, visitor);
+    }
+
+    visitor.visitScope(scope);
+    return visitor;
+  }
+
+  test('null transform emits children directly into the SVG root — no extra <g>', function () {
+    // After visitScope with null transform the SVG root should contain the
+    // child element directly, with no intermediate <g> wrapper.
+    const visitor = visitScopeWith(null, (scope, v) => {
+      // Manually push a child ShapeNode-like object that appends a <circle>.
+      scope.children.push({
+        toSVGElement(vis) {
+          const el = vis._createElement('circle', { cx: 5, cy: 5, r: 5 });
+          vis.svgElement.appendChild(el);
+        }
+      });
+    });
+
+    // The SVG root should have exactly the one <circle> as a direct child
+    // (plus the possible defs element, so we search by tagName).
+    const circles = visitor.svgElement.querySelectorAll('circle');
+    assert.strictEqual(circles.length, 1, 'one circle should be in the SVG');
+
+    // The circle's parent should be the SVG root, NOT a <g>.
+    assert.strictEqual(
+      circles[0].parentElement.tagName.toLowerCase(),
+      'svg',
+      'circle should be a direct child of <svg>, not wrapped in <g>'
+    );
+  });
+
+  test('identity DOMMatrix emits children directly — no extra <g>', function () {
+    const identity = new DOMMatrix(); // a=1, b=0, c=0, d=1, e=0, f=0
+
+    const visitor = visitScopeWith(identity, (scope, v) => {
+      scope.children.push({
+        toSVGElement(vis) {
+          vis.svgElement.appendChild(vis._createElement('rect', { x: 0, y: 0, width: 10, height: 10 }));
+        }
+      });
+    });
+
+    const rects = visitor.svgElement.querySelectorAll('rect');
+    assert.strictEqual(rects.length, 1);
+    assert.strictEqual(
+      rects[0].parentElement.tagName.toLowerCase(),
+      'svg',
+      'rect should be a direct child of <svg>, not wrapped in <g>'
+    );
+  });
+});
