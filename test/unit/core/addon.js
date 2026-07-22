@@ -22,9 +22,9 @@ suite('Addon Integration', function() {
       PrimitiveVisitor: class {},
       registerAddon: vi.fn()
     };
-    
+
     SVGExportAddon(mockP5, fn);
-    
+
     assert.typeOf(fn.buildShape, 'function');
     assert.typeOf(fn.createShape, 'function');
     assert.isUndefined(fn.beginRecord);
