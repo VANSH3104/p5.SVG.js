@@ -61,103 +61,109 @@ function createPInst() {
 suite('TransformStack', function() {
   test('should initialize with an identity matrix', function() {
     const pInst = createPInst();
-    pInst.buildShape(() => {
-      const tStack = pInst._activeRecorder.tStack;
-      assert.isDefined(tStack);
-      assert.instanceOf(tStack.current, DOMMatrix);
-      
-      const m = tStack.current;
-      assert.strictEqual(m.a, 1);
-      assert.strictEqual(m.b, 0);
-      assert.strictEqual(m.c, 0);
-      assert.strictEqual(m.d, 1);
-      assert.strictEqual(m.e, 0);
-      assert.strictEqual(m.f, 0);
-    });
+    const shape = pInst.createShape();
+    shape.begin();
+    const tStack = shape.recorder.tStack;
+    assert.isDefined(tStack);
+    assert.instanceOf(tStack.current, DOMMatrix);
+    
+    const m = tStack.current;
+    assert.strictEqual(m.a, 1);
+    assert.strictEqual(m.b, 0);
+    assert.strictEqual(m.c, 0);
+    assert.strictEqual(m.d, 1);
+    assert.strictEqual(m.e, 0);
+    assert.strictEqual(m.f, 0);
+    shape.end();
   });
 
   test('push should clone the current matrix', function() {
     const pInst = createPInst();
-    pInst.buildShape(() => {
-      const tStack = pInst._activeRecorder.tStack;
-      tStack.translate(50, 100);
-      
-      tStack.push();
-      assert.strictEqual(tStack.stack.length, 2);
-      
-      const m = tStack.current;
-      assert.strictEqual(m.e, 50);
-      assert.strictEqual(m.f, 100);
-      
-      // Modifying current should not affect parent in stack
-      tStack.translate(20, 30);
-      assert.strictEqual(tStack.current.e, 70);
-      assert.strictEqual(tStack.stack[0].e, 50);
-    });
+    const shape = pInst.createShape();
+    shape.begin();
+    const tStack = shape.recorder.tStack;
+    tStack.translate(50, 100);
+    
+    tStack.push();
+    assert.strictEqual(tStack.stack.length, 2);
+    
+    const m = tStack.current;
+    assert.strictEqual(m.e, 50);
+    assert.strictEqual(m.f, 100);
+    
+    // Modifying current should not affect parent in stack
+    tStack.translate(20, 30);
+    assert.strictEqual(tStack.current.e, 70);
+    assert.strictEqual(tStack.stack[0].e, 50);
+    shape.end();
   });
 
   test('pop should restore the previous matrix and not pop past root', function() {
     const pInst = createPInst();
-    pInst.buildShape(() => {
-      const tStack = pInst._activeRecorder.tStack;
-      tStack.translate(10, 20);
-      
-      tStack.push();
-      tStack.translate(100, 200);
-      assert.strictEqual(tStack.current.e, 110);
-      
-      tStack.pop();
-      assert.strictEqual(tStack.current.e, 10);
-      assert.strictEqual(tStack.stack.length, 1);
-      
-      // Pop when stack size is 1 should be a no-op
-      tStack.pop();
-      assert.strictEqual(tStack.current.e, 10);
-      assert.strictEqual(tStack.stack.length, 1);
-    });
+    const shape = pInst.createShape();
+    shape.begin();
+    const tStack = shape.recorder.tStack;
+    tStack.translate(10, 20);
+    
+    tStack.push();
+    tStack.translate(100, 200);
+    assert.strictEqual(tStack.current.e, 110);
+    
+    tStack.pop();
+    assert.strictEqual(tStack.current.e, 10);
+    assert.strictEqual(tStack.stack.length, 1);
+    
+    // Pop when stack size is 1 should be a no-op
+    tStack.pop();
+    assert.strictEqual(tStack.current.e, 10);
+    assert.strictEqual(tStack.stack.length, 1);
+    shape.end();
   });
 
   test('translate should translate the matrix self', function() {
     const pInst = createPInst();
-    pInst.buildShape(() => {
-      const tStack = pInst._activeRecorder.tStack;
-      tStack.translate(15, 25);
-      assert.strictEqual(tStack.current.e, 15);
-      assert.strictEqual(tStack.current.f, 25);
-    });
+    const shape = pInst.createShape();
+    shape.begin();
+    const tStack = shape.recorder.tStack;
+    tStack.translate(15, 25);
+    assert.strictEqual(tStack.current.e, 15);
+    assert.strictEqual(tStack.current.f, 25);
+    shape.end();
   });
 
   test('rotate should rotate the matrix self in degrees internally', function() {
     const pInst = createPInst();
-    pInst.buildShape(() => {
-      const tStack = pInst._activeRecorder.tStack;
-      // rotate is passed radians, converts to degrees inside rotateSelf
-      // PI / 2 rad = 90 degrees
-      tStack.rotate(Math.PI / 2);
-      
-      assert.closeTo(tStack.current.a, 0, 0.0001);
-      assert.closeTo(tStack.current.b, 1, 0.0001);
-      assert.closeTo(tStack.current.c, -1, 0.0001);
-      assert.closeTo(tStack.current.d, 0, 0.0001);
-    });
+    const shape = pInst.createShape();
+    shape.begin();
+    const tStack = shape.recorder.tStack;
+    // rotate is passed radians, converts to degrees inside rotateSelf
+    // PI / 2 rad = 90 degrees
+    tStack.rotate(Math.PI / 2);
+    
+    assert.closeTo(tStack.current.a, 0, 0.0001);
+    assert.closeTo(tStack.current.b, 1, 0.0001);
+    assert.closeTo(tStack.current.c, -1, 0.0001);
+    assert.closeTo(tStack.current.d, 0, 0.0001);
+    shape.end();
   });
 
   test('scale should scale with one or two arguments', function() {
     const pInst = createPInst();
-    pInst.buildShape(() => {
-      const tStack = pInst._activeRecorder.tStack;
-      
-      // Scale with one argument (uniform scaling)
-      tStack.scale(2);
-      assert.strictEqual(tStack.current.a, 2);
-      assert.strictEqual(tStack.current.d, 2);
-      
-      tStack.push();
-      // Scale with two arguments (non-uniform scaling)
-      tStack.scale(3, 4);
-      // Cumulative: 2 * 3 = 6, 2 * 4 = 8
-      assert.strictEqual(tStack.current.a, 6);
-      assert.strictEqual(tStack.current.d, 8);
-    });
+    const shape = pInst.createShape();
+    shape.begin();
+    const tStack = shape.recorder.tStack;
+    
+    // Scale with one argument (uniform scaling)
+    tStack.scale(2);
+    assert.strictEqual(tStack.current.a, 2);
+    assert.strictEqual(tStack.current.d, 2);
+    
+    tStack.push();
+    // Scale with two arguments (non-uniform scaling)
+    tStack.scale(3, 4);
+    // Cumulative: 2 * 3 = 6, 2 * 4 = 8
+    assert.strictEqual(tStack.current.a, 6);
+    assert.strictEqual(tStack.current.d, 8);
+    shape.end();
   });
 });
