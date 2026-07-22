@@ -26,17 +26,17 @@ suite('Addon Integration', function() {
     SVGExportAddon(mockP5, fn);
     
     assert.typeOf(fn.buildShape, 'function');
-    assert.typeOf(fn.beginRecord, 'function');
-    assert.typeOf(fn.endRecord, 'function');
+    assert.typeOf(fn.createShape, 'function');
+    assert.isUndefined(fn.beginRecord);
+    assert.isUndefined(fn.endRecord);
     assert.typeOf(fn.getSVG, 'function');
     assert.typeOf(fn.shape, 'function');
     assert.typeOf(fn.saveSVG, 'function');
-    assert.typeOf(fn.saveAsSVG, 'function');
     assert.typeOf(fn._svgCaptureAdapters, 'function');
     assert.typeOf(fn._svgCaptureState, 'function');
   });
 
-  test('should record shapes using beginRecord and endRecord', function() {
+  test('should record shapes using createShape, begin and end', function() {
     const fn = {};
     const mockP5 = {
       PrimitiveVisitor: class {},
@@ -63,23 +63,27 @@ suite('Addon Integration', function() {
     };
     Object.setPrototypeOf(pInst, fn);
 
-    // Call beginRecord
-    pInst.beginRecord();
-    assert.isNotNull(pInst._activeRecorder);
+    const shapeObj = pInst.createShape();
+    assert.isUndefined(shapeObj.recorder);
+
+    // Call begin
+    shapeObj.begin();
+    assert.isDefined(shapeObj.recorder);
+    assert.isTrue(shapeObj.recorder.active);
 
     // Simulate drawing
     const shape = { accept() {} };
     pInst._renderer.drawShape(shape);
 
-    // Call endRecord
-    const record = pInst.endRecord();
-    assert.isNull(pInst._activeRecorder);
-    assert.strictEqual(record.type, 'scope');
-    assert.strictEqual(record.children.length, 1);
-    assert.strictEqual(record.children[0].type, 'shape');
+    // Call end
+    shapeObj.end();
+    assert.isUndefined(shapeObj.recorder);
+    assert.strictEqual(shapeObj.data.type, 'scope');
+    assert.strictEqual(shapeObj.data.children.length, 1);
+    assert.strictEqual(shapeObj.data.children[0].type, 'shape');
   });
 
-  test('should warn on mismatched or nested beginRecord / endRecord', function() {
+  test('should warn on mismatched shape.end()', function() {
     const fn = {};
     const mockP5 = {
       PrimitiveVisitor: class {},
@@ -112,19 +116,11 @@ suite('Addon Integration', function() {
     console.warn = (msg) => { warnings.push(msg); };
 
     try {
-      // 1. endRecord without beginRecord
-      const record1 = pInst.endRecord();
-      assert.isNull(record1);
+      const shapeObj = pInst.createShape();
+      // 1. end without begin
+      shapeObj.end();
       assert.strictEqual(warnings.length, 1);
-      assert.include(warnings[0], 'endRecord() called without a matching beginRecord()');
-
-      // 2. nested beginRecord calls
-      pInst.beginRecord();
-      pInst.beginRecord();
-      assert.strictEqual(warnings.length, 2);
-      assert.include(warnings[1], 'beginRecord() called while already recording');
-
-      pInst.endRecord();
+      assert.include(warnings[0], 'end() called without a matching begin()');
     } finally {
       console.warn = originalWarn;
     }
