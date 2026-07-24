@@ -32,4 +32,13 @@ visualSuite('SVG Import - Transforms', () => {
     await screenshot();
   });
 
+  // ── rotate: transform="rotate(deg)" on a group
+  visualTest('rotate', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'transform-rotate');
+    p.shape(shape);
+    await screenshot();
+  });
+
+  
 });
