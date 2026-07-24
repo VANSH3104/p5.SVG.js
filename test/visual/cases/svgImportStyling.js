@@ -45,5 +45,21 @@ visualSuite('SVG Import - Styling', () => {
     await screenshot();
   });
 
+  // ── CSS: styles applied via <style> block class rules
+  visualTest('CSS', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'style-css');
+    p.shape(shape);
+    await screenshot();
+  });
+
+  // ── inheritance: fill set on parent <g> inherited by children
+  visualTest('inheritance', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'style-inheritance');
+    p.shape(shape);
+    await screenshot();
+  });
+
 
 });

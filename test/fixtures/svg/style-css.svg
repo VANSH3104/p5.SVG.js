@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">
+  <style>
+    .red-shape   { fill: #e74c3c; stroke: black; stroke-width: 1; }
+    .blue-shape  { fill: #3498db; stroke: black; stroke-width: 1; }
+    .green-shape { fill: #2ecc71; stroke: black; stroke-width: 1; }
+  </style>
+  <rect x="0" y="0" width="200" height="200" fill="#c8c8c8"/>
+  <!-- shapes styled via CSS class rules in a <style> block -->
+  <circle  cx="60"  cy="70"  r="45" class="red-shape"/>
+  <rect    x="105"  y="25"   width="70" height="90" class="blue-shape"/>
+  <polygon points="100,130 170,190 30,190" class="green-shape"/>
+</svg>
