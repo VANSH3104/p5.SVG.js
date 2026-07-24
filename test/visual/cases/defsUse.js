@@ -22,5 +22,44 @@ visualSuite('SVG Import - defs and use', () => {
     await screenshot();
   });
 
-  
+  // ── group use: <g> cross-shape in <defs>, reused with rotation transforms
+  visualTest('group use', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'defs-use-group');
+    p.shape(shape);
+    await screenshot();
+  });
+
+  // ── nested use: <use> elements inside a <g> defined in <defs>, then outer <use>
+  visualTest('nested use', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'defs-use-nested');
+    p.shape(shape);
+    await screenshot();
+  });
+
+  // ── symbol: <symbol> element referenced via <use>
+  visualTest('symbol', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'defs-symbol');
+    p.shape(shape);
+    await screenshot();
+  });
+
+  // ── viewBox: <symbol viewBox="..."> with width/height on <use> triggers scaling
+  visualTest('viewBox', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'defs-symbol-viewbox');
+    p.shape(shape);
+    await screenshot();
+  });
+
+  // ── x/y: x and y attributes on <use> position each stamp independently
+  visualTest('x and y', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'defs-use-xy');
+    p.shape(shape);
+    await screenshot();
+  });
+
 });
