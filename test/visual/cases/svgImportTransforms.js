@@ -40,5 +40,20 @@ visualSuite('SVG Import - Transforms', () => {
     await screenshot();
   });
 
-  
+  // ── scale: transform="translate(...) scale(n)" on a group
+  visualTest('scale', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'transform-scale');
+    p.shape(shape);
+    await screenshot();
+  });
+
+  // ── nested groups: translate > rotate > scale stacked across three <g> levels
+  visualTest('nested groups', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'transform-nested-groups');
+    p.shape(shape);
+    await screenshot();
+  });
+
 });
