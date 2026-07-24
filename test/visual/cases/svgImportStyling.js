@@ -29,5 +29,13 @@ visualSuite('SVG Import - Styling', () => {
     await screenshot();
   });
 
+  // ── stroke: stroke color and stroke-width variations
+  visualTest('stroke', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'style-stroke');
+    p.shape(shape);
+    await screenshot();
+  });
+
 
 });
