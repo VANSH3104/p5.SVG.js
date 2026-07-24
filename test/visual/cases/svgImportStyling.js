@@ -37,5 +37,13 @@ visualSuite('SVG Import - Styling', () => {
     await screenshot();
   });
 
+  // ── opacity: element-level opacity attribute
+  visualTest('opacity', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'style-opacity');
+    p.shape(shape);
+    await screenshot();
+  });
+
 
 });
