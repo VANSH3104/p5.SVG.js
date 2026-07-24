@@ -42,5 +42,13 @@ visualSuite('SVG Import - Shapes', () => {
     await screenshot();
   });
 
+  // ── ellipse
+  visualTest('ellipse', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'ellipse');
+    p.shape(shape);
+    await screenshot();
+  });
+
 
 });
