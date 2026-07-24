@@ -1,4 +1,5 @@
 import { SVGExportAddon } from '../../src/p5.svgExport.js';
+import { SVGImportAddon } from '../../src/p5.svgImport.js';
 import { server } from 'vitest/browser';
 import pixelmatch from 'pixelmatch';
 
@@ -344,6 +345,7 @@ export function visualTest(
         const { default: loadedP5 } = await import(/* @vite-ignore */ url);
         window.p5 = loadedP5;
         window.p5.registerAddon(SVGExportAddon);
+        window.p5.registerAddon(SVGImportAddon);
       }
 
       return new Promise((res) => {
@@ -375,15 +377,17 @@ export function visualTest(
 
       const actual = [];
 
+      // Captures the current p5 canvas directly as a p5.Image.
+      // Matches p5.js core convention: call with no args to capture the canvas.
+      // For SVG export tests, pass the SVG string to render it first.
+      const screenshotCanvas = async () => {
+        const snap = await myp5.get();
+        snap.pixelDensity(1);
+        actual.push(snap);
+      };
+
       // Renders an SVG string into the p5 canvas and captures it as a p5.Image.
-      // If svgString is not provided, captures the current canvas directly.
-      const screenshot = async (svgString) => {
-        if (!svgString) {
-          const snap = await myp5.get();
-          snap.pixelDensity(1);
-          actual.push(snap);
-          return;
-        }
+      const screenshotSVG = async (svgString) => {
         const blob = new Blob([svgString], { type: 'image/svg+xml' });
         const url  = URL.createObjectURL(blob);
 
@@ -403,6 +407,12 @@ export function visualTest(
         snap.pixelDensity(1);
         actual.push(snap);
       };
+
+      // Single screenshot helper — matches p5.js core's callback signature: (p, screenshot).
+      // screenshot()          → captures the canvas directly (import tests, same as p5.js)
+      // screenshot(svgString) → renders SVG then captures (export tests)
+      const screenshot = (svgString) =>
+        svgString ? screenshotSVG(svgString) : screenshotCanvas();
 
       // Generate screenshots
       await callback(myp5, screenshot);
