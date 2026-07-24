@@ -74,5 +74,20 @@ visualSuite('SVG Import - Shapes', () => {
     await screenshot();
   });
 
+  // ── arc (path with A command)
+  visualTest('arc', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'arc');
+    p.shape(shape);
+    await screenshot();
+  });
+
+  // ── rounded rect (rect with rx/ry)
+  visualTest('rounded rect', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'rounded-rect');
+    p.shape(shape);
+    await screenshot();
+  });
 
 });
