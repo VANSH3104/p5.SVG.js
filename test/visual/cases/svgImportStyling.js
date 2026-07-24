@@ -61,5 +61,12 @@ visualSuite('SVG Import - Styling', () => {
     await screenshot();
   });
 
+  // ── currentColor: stroke and fill resolve to the svg color= attribute
+  visualTest('currentColor', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'style-currentcolor');
+    p.shape(shape);
+    await screenshot();
+  });
 
 });
