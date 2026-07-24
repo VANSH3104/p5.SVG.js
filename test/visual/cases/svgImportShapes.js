@@ -66,5 +66,13 @@ visualSuite('SVG Import - Shapes', () => {
     await screenshot();
   });
 
+  // ── path (bezier curve path)
+  visualTest('path', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'path-bezier');
+    p.shape(shape);
+    await screenshot();
+  });
+
 
 });
