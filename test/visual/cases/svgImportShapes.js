@@ -50,5 +50,21 @@ visualSuite('SVG Import - Shapes', () => {
     await screenshot();
   });
 
+  // ── polygon
+  visualTest('polygon', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'polygon');
+    p.shape(shape);
+    await screenshot();
+  });
+
+  // ── polyline
+  visualTest('polyline', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'polyline');
+    p.shape(shape);
+    await screenshot();
+  });
+
 
 });
