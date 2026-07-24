@@ -34,5 +34,13 @@ visualSuite('SVG Import - Shapes', () => {
     await screenshot();
   });
 
+  // ── rect
+  visualTest('rect', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'rect');
+    p.shape(shape);
+    await screenshot();
+  });
+
 
 });
