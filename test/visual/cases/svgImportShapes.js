@@ -90,4 +90,12 @@ visualSuite('SVG Import - Shapes', () => {
     await screenshot();
   });
 
+  // ── overlapping shapes with per-shape fill and stroke
+  visualTest('overlapping shapes', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'overlapping-shapes');
+    p.shape(shape);
+    await screenshot();
+  });
+
 });
