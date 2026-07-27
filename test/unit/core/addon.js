@@ -22,21 +22,21 @@ suite('Addon Integration', function() {
       PrimitiveVisitor: class {},
       registerAddon: vi.fn()
     };
-    
+
     SVGExportAddon(mockP5, fn);
-    
+
     assert.typeOf(fn.buildShape, 'function');
-    assert.typeOf(fn.beginRecord, 'function');
-    assert.typeOf(fn.endRecord, 'function');
+    assert.typeOf(fn.createShape, 'function');
+    assert.isUndefined(fn.beginRecord);
+    assert.isUndefined(fn.endRecord);
     assert.typeOf(fn.getSVG, 'function');
     assert.typeOf(fn.shape, 'function');
     assert.typeOf(fn.saveSVG, 'function');
-    assert.typeOf(fn.saveAsSVG, 'function');
     assert.typeOf(fn._svgCaptureAdapters, 'function');
     assert.typeOf(fn._svgCaptureState, 'function');
   });
 
-  test('should record shapes using beginRecord and endRecord', function() {
+  test('should record shapes using createShape, begin and end', function() {
     const fn = {};
     const mockP5 = {
       PrimitiveVisitor: class {},
@@ -63,23 +63,27 @@ suite('Addon Integration', function() {
     };
     Object.setPrototypeOf(pInst, fn);
 
-    // Call beginRecord
-    pInst.beginRecord();
-    assert.isNotNull(pInst._activeRecorder);
+    const shapeObj = pInst.createShape();
+    assert.isUndefined(shapeObj.recorder);
+
+    // Call begin
+    shapeObj.begin();
+    assert.isDefined(shapeObj.recorder);
+    assert.isTrue(shapeObj.recorder.active);
 
     // Simulate drawing
     const shape = { accept() {} };
     pInst._renderer.drawShape(shape);
 
-    // Call endRecord
-    const record = pInst.endRecord();
-    assert.isNull(pInst._activeRecorder);
-    assert.strictEqual(record.type, 'scope');
-    assert.strictEqual(record.children.length, 1);
-    assert.strictEqual(record.children[0].type, 'shape');
+    // Call end
+    shapeObj.end();
+    assert.isUndefined(shapeObj.recorder);
+    assert.strictEqual(shapeObj.data.type, 'scope');
+    assert.strictEqual(shapeObj.data.children.length, 1);
+    assert.strictEqual(shapeObj.data.children[0].type, 'shape');
   });
 
-  test('should warn on mismatched or nested beginRecord / endRecord', function() {
+  test('should warn on mismatched shape.end()', function() {
     const fn = {};
     const mockP5 = {
       PrimitiveVisitor: class {},
@@ -112,19 +116,11 @@ suite('Addon Integration', function() {
     console.warn = (msg) => { warnings.push(msg); };
 
     try {
-      // 1. endRecord without beginRecord
-      const record1 = pInst.endRecord();
-      assert.isNull(record1);
+      const shapeObj = pInst.createShape();
+      // 1. end without begin
+      shapeObj.end();
       assert.strictEqual(warnings.length, 1);
-      assert.include(warnings[0], 'endRecord() called without a matching beginRecord()');
-
-      // 2. nested beginRecord calls
-      pInst.beginRecord();
-      pInst.beginRecord();
-      assert.strictEqual(warnings.length, 2);
-      assert.include(warnings[1], 'beginRecord() called while already recording');
-
-      pInst.endRecord();
+      assert.include(warnings[0], 'end() called without a matching begin()');
     } finally {
       console.warn = originalWarn;
     }
@@ -245,4 +241,138 @@ suite('Addon Integration', function() {
     assert.isTrue(drawShapeCalled, 'drawShape should be called on the renderer');
     assert.isTrue(applyMatrixCalled, 'applyMatrix should be called to set transform');
   });
+
+  test('should record shapes via buildShape helper', function() {
+    const fn = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn);
+
+    const pInst = {
+      width: 600,
+      height: 600,
+      _renderer: {
+        states: {
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
+          strokeWeight: 1
+        },
+        drawShape(shape) { return shape; },
+        push() {},
+        pop() {}
+      },
+      color(...args) { return createMockColor(255, 0, 0, 255, '#ff0000'); },
+      push() {},
+      pop() {}
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    let callbackCalled = false;
+    const shapeObj = pInst.buildShape(() => {
+      callbackCalled = true;
+      const shape = { accept() {} };
+      pInst._renderer.drawShape(shape);
+    });
+
+    assert.isTrue(callbackCalled);
+    assert.strictEqual(shapeObj.data.type, 'scope');
+    assert.strictEqual(shapeObj.data.children.length, 1);
+    assert.isUndefined(shapeObj.recorder);
+  });
+
+  test('buildShape should end recording even if callback throws', function() {
+    const fn = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn);
+
+    const popSpy = vi.fn();
+    const pInst = {
+      width: 600,
+      height: 600,
+      _renderer: {
+        states: {
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
+          strokeWeight: 1
+        },
+        push() {},
+        pop() {}
+      },
+      color(...args) { return createMockColor(255, 0, 0, 255, '#ff0000'); },
+      push() {},
+      pop: popSpy
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    let errorThrown = false;
+    try {
+      pInst.buildShape(() => {
+        throw new Error('Test Callback Error');
+      });
+    } catch (e) {
+      if (e.message === 'Test Callback Error') {
+        errorThrown = true;
+      }
+    }
+
+    assert.isTrue(errorThrown);
+    // Recording should be properly stopped/ended even if it threw, which calls pop()
+    assert.strictEqual(popSpy.mock.calls.length, 1, 'pop should have been called to restore state');
+  });
+
+  test('should replay recorded images via shape()', function() {
+    const fn = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn);
+
+    let imageCalled = false;
+    let imageArgs = null;
+
+    const pInst = {
+      width: 600,
+      height: 600,
+      image(img, dx, dy, dw, dh, sx, sy, sw, sh) {
+        imageCalled = true;
+        imageArgs = [img, dx, dy, dw, dh, sx, sy, sw, sh];
+      },
+      push() {},
+      pop() {},
+      fill() {},
+      stroke() {},
+      noFill() {},
+      noStroke() {},
+      strokeWeight() {}
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    const mockRecord = {
+      type: 'scope',
+      children: [
+        {
+          type: 'image',
+          img: 'mock-img-src',
+          args: [0, 0, 100, 100, 10, 20, 200, 150],
+          state: {}
+        }
+      ]
+    };
+
+    pInst.shape(mockRecord);
+
+    assert.isTrue(imageCalled, 'image should be called on the p5 instance');
+    assert.deepEqual(imageArgs, [
+      'mock-img-src',
+      10, 20, 200, 150, // dx, dy, dw, dh
+      0, 0, 100, 100    // sx, sy, sw, sh
+    ]);
+  });
 });
+
