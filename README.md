@@ -31,7 +31,7 @@ Include the p5.js library and the `p5.svg-io` addons in your project's `index.ht
 <head>
   <title>p5.SVG Example</title>
   <!-- Load p5.js -->
-  <script src="https://raw.esm.sh/pr/p5@02bcb7e/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@2.3.1/lib/p5.js"></script>
   
   <!-- Load p5.SVG Export Addon -->
   <script src="https://cdn.jsdelivr.net/npm/p5.svg-io@0.1.4/dist/p5.svgExport.min.js"></script>
