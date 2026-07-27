@@ -547,3 +547,140 @@ suite('SVGVisitor', function() {
     assert.strictEqual(quadStripEl.getAttribute('d'), 'M 0 0 L 0 10 L 10 10 L 10 0 Z');
   });
 });
+
+
+suite('visitImage — SVG Image Exporting', function () {
+  test('should export simple uncropped image', function () {
+    const pInst = createPInst();
+    const visitor = createVisitor(pInst);
+
+    // Minimal currentState so style applications don't crash
+    visitor.currentState = {
+      fill: null,
+      stroke: null,
+      strokeWeight: 0
+    };
+
+    const mockCanvas = {
+      toDataURL() {
+        return 'data:image/png;base64,mockDataURL';
+      }
+    };
+    const mockImg = {
+      canvas: mockCanvas,
+      width: 100,
+      height: 100
+    };
+
+    // Args: [sx, sy, sw, sh, dx, dy, dw, dh]
+    const imageNode = {
+      img: mockImg,
+      args: [0, 0, 100, 100, 10, 20, 200, 150]
+    };
+
+    visitor.visitImage(imageNode);
+
+    const images = visitor.svgElement.querySelectorAll('image');
+    assert.strictEqual(images.length, 1);
+
+    const imgEl = images[0];
+    assert.strictEqual(imgEl.getAttribute('x'), '10');
+    assert.strictEqual(imgEl.getAttribute('y'), '20');
+    assert.strictEqual(imgEl.getAttribute('width'), '200');
+    assert.strictEqual(imgEl.getAttribute('height'), '150');
+    assert.strictEqual(imgEl.getAttribute('preserveAspectRatio'), 'none');
+    assert.strictEqual(imgEl.getAttribute('href'), 'data:image/png;base64,mockDataURL');
+    assert.strictEqual(imgEl.getAttribute('xlink:href'), 'data:image/png;base64,mockDataURL');
+  });
+
+  test('should export cropped image with clipPath', function () {
+    const pInst = createPInst();
+    const visitor = createVisitor(pInst);
+
+    visitor.currentState = {
+      fill: null,
+      stroke: null,
+      strokeWeight: 0
+    };
+
+    const mockCanvas = {
+      toDataURL() {
+        return 'data:image/png;base64,mockCroppedData';
+      }
+    };
+    const mockImg = {
+      canvas: mockCanvas,
+      width: 100,
+      height: 100
+    };
+
+    // Cropped parameters: sx=10, sy=10, sw=80, sh=80, dx=5, dy=5, dw=40, dh=40
+    const imageNode = {
+      img: mockImg,
+      args: [10, 10, 80, 80, 5, 5, 40, 40]
+    };
+
+    visitor.visitImage(imageNode);
+
+    // Verify clipPath was created in defs
+    const defs = visitor.svgElement.querySelector('defs');
+    assert.isNotNull(defs);
+    const clipPath = defs.querySelector('clipPath');
+    assert.isNotNull(clipPath);
+    const clipId = clipPath.getAttribute('id');
+    assert.match(clipId, /^clip-p5svg-\d+$/);
+
+    // Verify the clip path rect matches destination coordinates and dimensions
+    const clipRect = clipPath.querySelector('rect');
+    assert.isNotNull(clipRect);
+    assert.strictEqual(clipRect.getAttribute('x'), '5');
+    assert.strictEqual(clipRect.getAttribute('y'), '5');
+    assert.strictEqual(clipRect.getAttribute('width'), '40');
+    assert.strictEqual(clipRect.getAttribute('height'), '40');
+
+    // Verify the image was correctly scaled and clipped
+    const images = visitor.svgElement.querySelectorAll('image');
+    assert.strictEqual(images.length, 1);
+    const imgEl = images[0];
+
+    // Scale factors: scaleX = dw/sw = 40/80 = 0.5. scaleY = dh/sh = 40/80 = 0.5.
+    // fullW = imgW * scaleX = 100 * 0.5 = 50.
+    // fullH = imgH * scaleY = 100 * 0.5 = 50.
+    // imgX = dx - sx * scaleX = 5 - 10 * 0.5 = 0.
+    // imgY = dy - sy * scaleY = 5 - 10 * 0.5 = 0.
+    assert.strictEqual(imgEl.getAttribute('x'), '0');
+    assert.strictEqual(imgEl.getAttribute('y'), '0');
+    assert.strictEqual(imgEl.getAttribute('width'), '50');
+    assert.strictEqual(imgEl.getAttribute('height'), '50');
+    assert.strictEqual(imgEl.getAttribute('clip-path'), `url(#${clipId})`);
+    assert.strictEqual(imgEl.getAttribute('href'), 'data:image/png;base64,mockCroppedData');
+  });
+
+  test('should handle string URL as image source', function () {
+    const pInst = createPInst();
+    const visitor = createVisitor(pInst);
+
+    visitor.currentState = {
+      fill: null,
+      stroke: null,
+      strokeWeight: 0
+    };
+
+    const imageNode = {
+      img: 'http://example.com/image.png',
+      args: [0, 0, 100, 100, 5, 5, 50, 50]
+    };
+
+    visitor.visitImage(imageNode);
+
+    const images = visitor.svgElement.querySelectorAll('image');
+    assert.strictEqual(images.length, 1);
+    const imgEl = images[0];
+    assert.strictEqual(imgEl.getAttribute('href'), 'http://example.com/image.png');
+    assert.strictEqual(imgEl.getAttribute('x'), '5');
+    assert.strictEqual(imgEl.getAttribute('y'), '5');
+    assert.strictEqual(imgEl.getAttribute('width'), '50');
+    assert.strictEqual(imgEl.getAttribute('height'), '50');
+  });
+});
+
