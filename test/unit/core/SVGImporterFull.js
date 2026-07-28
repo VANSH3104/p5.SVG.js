@@ -161,6 +161,37 @@ suite('StyleResolver', function () {
     assert.strictEqual(firstChild(record).state.strokeWeight, 0);
   });
 
+  test('stroke-linecap attribute is parsed correctly', function () {
+    const record = createSVG(`
+      <svg xmlns="http://www.w3.org/2000/svg">
+        <line x1="0" y1="0" x2="10" y2="10" stroke="black" stroke-linecap="round"/>
+      </svg>
+    `);
+    assert.strictEqual(firstChild(record).state.strokeCap, 'round');
+  });
+
+  test('stroke-linecap in inline style overrides attribute', function () {
+    const record = createSVG(`
+      <svg xmlns="http://www.w3.org/2000/svg">
+        <line x1="0" y1="0" x2="10" y2="10" stroke="black" stroke-linecap="butt" style="stroke-linecap: square"/>
+      </svg>
+    `);
+    assert.strictEqual(firstChild(record).state.strokeCap, 'square');
+  });
+
+  test('stroke-linecap inherits from parent <g>', function () {
+    const record = createSVG(`
+      <svg xmlns="http://www.w3.org/2000/svg">
+        <g stroke-linecap="square">
+          <line x1="0" y1="0" x2="10" y2="10" stroke="black"/>
+        </g>
+      </svg>
+    `);
+    const groupNode = firstChild(record);
+    const lineNode = groupNode.children[0];
+    assert.strictEqual(lineNode.state.strokeCap, 'square');
+  });
+
   test('inline style overrides attribute', function () {
     // style="fill:green" should override fill="red"
     const record = createSVG(`
