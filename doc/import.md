@@ -171,4 +171,7 @@ The SVG Importer supports standard SVG elements and translates them directly to 
 ### Limitations
 
 * Text elements (`<text>`) are currently skipped.
+* Image elements (`<image>`) are not yet supported in import.
+* Clipping paths (`<clipPath>`) and clip masks are not yet supported.
 * Complex filters, gradients, and patterns (`url(#...)`) are not yet supported.
+

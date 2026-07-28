@@ -227,3 +227,21 @@ function setup() {
 }
 ```
 </details>
+
+---
+
+## 5. Features Supported & Limitations
+
+The SVG Exporter intercepts p5.js drawing commands and translates them into native SVG elements:
+
+* **Basic Primitives**: `rect()`, `circle()`, `ellipse()`, `line()`, `point()`, `triangle()`, `quad()`, `arc()`.
+* **Complex Paths**: Custom shapes generated with `beginShape()`, `vertex()`, `bezierVertex()`, `splineVertex()`, `beginContour()`, `endContour()`, and `endShape()`.
+* **Images**: `image()` drawing commands, exported as embedded base64 Data URLs.
+* **Transforms & State**: Matrix transformations (`translate()`, `rotate()`, `scale()`, `applyMatrix()`), state scoping (`push()`, `pop()`), and color/stroke styling (`fill()`, `stroke()`, `strokeWeight()`, `background()`, `clear()`).
+
+### Limitations
+
+* **Text**: `text()` drawing commands and custom typography font styling are not currently supported.
+* **Clipping**: Canvas mask/clipping regions created using `clip()` are not yet supported.
+* **Filters & WebGL**: WebGL 3D rendering, custom shaders, and canvas blend modes/filters are not supported.
+
