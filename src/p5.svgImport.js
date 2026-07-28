@@ -127,6 +127,11 @@ class StyleResolver {
         if (rawStrokeWidth !== undefined) {
             context.strokeWidth = parseLength(rawStrokeWidth, parentContext.strokeWidth);
         }
+        const rawStrokeCap = this.getProp(node, inlineStyle, "stroke-linecap","strokeLinecap");
+
+        if (rawStrokeCap !== undefined) {
+            context.strokeCap = rawStrokeCap;
+        }
     }
 
     resolveFill(context, node, inlineStyle) {
@@ -296,6 +301,7 @@ class RenderContext {
             this.fill = parent.fill;
             this.stroke = parent.stroke;
             this.strokeWidth = parent.strokeWidth;
+            this.strokeCap = parent.strokeCap;
             this.opacity = parent.opacity;
             this.fillOpacity = parent.fillOpacity;
             this.strokeOpacity = parent.strokeOpacity;
@@ -306,6 +312,7 @@ class RenderContext {
             this.fill = "rgb(0, 0, 0)";
             this.stroke = "none";
             this.strokeWidth = 1;
+            this.strokeCap = "butt";
             this.opacity = 1;
             this.fillOpacity = 1;
             this.strokeOpacity = 1;
@@ -404,6 +411,7 @@ export function SVGImportAddon(p5, fn, lifecycles) {
                 fill: this.makeColor(context.fill, context.opacity * context.fillOpacity, context),
                 stroke: this.makeColor(context.stroke, context.opacity * context.strokeOpacity, context),
                 strokeWeight: context.strokeWidth,
+                strokeCap: context.strokeCap,
                 renderContext: context.clone(),
                 fillOpacity: context.fillOpacity,
                 strokeOpacity: context.strokeOpacity,
