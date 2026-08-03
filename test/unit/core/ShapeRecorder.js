@@ -28,6 +28,9 @@ function createPInst() {
         strokeColor: 'black',
         strokeWeight: 1
       },
+      strokeCap() {
+        return 'butt';
+      },
       drawShape(shape) { return shape; },
       push() {},
       pop() {},
@@ -68,7 +71,7 @@ function createPInst() {
 suite('ShapeRecorder', function() {
   test('should record basic hierarchy and nodes correctly', function() {
     const pInst = createPInst();
-
+    
     let shape;
     const record = pInst.buildShape(() => {
       // Record background
@@ -233,6 +236,7 @@ suite('ShapeRecorder', function() {
     pInst.noFill = () => {};
     pInst.noStroke = () => {};
     pInst.strokeWeight = () => {};
+    pInst.strokeCap = () => {};
 
     // Mock colors that have _getRGBA
     const mockColor = {
@@ -283,4 +287,20 @@ suite('ShapeRecorder', function() {
     assert.strictEqual(record.data.type, 'scope');
     assert.strictEqual(record.data.children.length, 0);
   });
+
+  test('should record strokeCap state in shape node', function() {
+    const pInst = createPInst();
+    pInst._renderer.strokeCap = () => 'round';
+
+    const record = pInst.buildShape(() => {
+      const shape = new MockShape('line1');
+      pInst._renderer.drawShape(shape);
+    });
+
+    assert.strictEqual(record.data.children.length, 1);
+    const shapeNode = record.data.children[0];
+    assert.strictEqual(shapeNode.type, 'shape');
+    assert.strictEqual(shapeNode.state.strokeCap, 'round');
+  });
 });
+

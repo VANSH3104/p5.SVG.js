@@ -137,7 +137,7 @@ suite('SVGVisitor', function() {
     assert.strictEqual(el.getAttribute('r'), '30');
   });
 
-  test('_applyStyle should apply fill, stroke and stroke-width based on currentState', function() {
+  test('_applyStyle should apply fill, stroke, stroke-width and stroke-linecap based on currentState', function() {
     const pInst = createPInst();
     const visitor = createVisitor(pInst);
 
@@ -145,13 +145,15 @@ suite('SVGVisitor', function() {
     visitor.currentState = {
       fill: createMockColor(255, 0, 0, 255, '#ff0000'),
       stroke: createMockColor(0, 0, 255, 255, '#0000ff'),
-      strokeWeight: 3
+      strokeWeight: 3,
+      strokeCap: 'square'
     };
 
     visitor._applyStyle(el);
     assert.strictEqual(el.getAttribute('fill'), '#ff0000');
     assert.strictEqual(el.getAttribute('stroke'), '#0000ff');
     assert.strictEqual(el.getAttribute('stroke-width'), '3');
+    assert.strictEqual(el.getAttribute('stroke-linecap'), 'square');
   });
 
   test('_appendShapeElement should wrap with matrix group if transform is not identity', function() {

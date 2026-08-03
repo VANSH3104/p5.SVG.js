@@ -53,6 +53,7 @@ suite('Addon Integration', function() {
           strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
           strokeWeight: 1
         },
+        strokeCap() { return 'butt'; },
         drawShape(shape) { return shape; },
         push() {},
         pop() {}
@@ -182,7 +183,7 @@ suite('Addon Integration', function() {
     }
   });
 
-  test('should replay recorded shapes via shape()', function() {
+  test('should replay recorded shapes via shape() including strokeCap', function() {
     const fn = {};
     const mockP5 = {
       PrimitiveVisitor: class {},
@@ -192,6 +193,7 @@ suite('Addon Integration', function() {
 
     let drawShapeCalled = false;
     let applyMatrixCalled = false;
+    let strokeCapValue = null;
 
     const pInst = {
       width: 600,
@@ -201,6 +203,9 @@ suite('Addon Integration', function() {
           fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
           strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
           strokeWeight: 1
+        },
+        strokeCap() {
+          return 'butt';
         },
         drawShape(shape) {
           drawShapeCalled = true;
@@ -216,7 +221,10 @@ suite('Addon Integration', function() {
       stroke() {},
       noFill() {},
       noStroke() {},
-      strokeWeight() {}
+      strokeWeight() {},
+      strokeCap(cap) {
+        strokeCapValue = cap;
+      }
     };
     Object.setPrototypeOf(pInst, fn);
 
@@ -230,7 +238,8 @@ suite('Addon Integration', function() {
             transform: { a: 1, b: 0, c: 0, d: 1, e: 10, f: 20 },
             fill: createMockColor(255, 0, 0, 255, '#ff0000'),
             stroke: createMockColor(0, 0, 0, 255, '#000000'),
-            strokeWeight: 2
+            strokeWeight: 2,
+            strokeCap: 'round'
           }
         }
       ]
@@ -240,6 +249,7 @@ suite('Addon Integration', function() {
 
     assert.isTrue(drawShapeCalled, 'drawShape should be called on the renderer');
     assert.isTrue(applyMatrixCalled, 'applyMatrix should be called to set transform');
+    assert.strictEqual(strokeCapValue, 'round', 'strokeCap should be replayed');
   });
 
   test('should record shapes via buildShape helper', function() {
@@ -258,6 +268,9 @@ suite('Addon Integration', function() {
           fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
           strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
           strokeWeight: 1
+        },
+        strokeCap() {
+          return 'butt';
         },
         drawShape(shape) { return shape; },
         push() {},
