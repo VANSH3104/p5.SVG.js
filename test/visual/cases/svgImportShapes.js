@@ -98,4 +98,12 @@ visualSuite('SVG Import - Shapes', () => {
     await screenshot();
   });
 
+  // ── line: a simple <line> element with stroke presentation attributes
+  visualTest('line', async (p, screenshot) => {
+    setup(p);
+    const shape = await loadFixture(p, 'line');
+    p.shape(shape);
+    await screenshot();
+  });
+
 });
