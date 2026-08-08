@@ -389,3 +389,50 @@ suite('Addon Integration', function() {
   });
 });
 
+
+// ─── Test 9: getSVG returns a valid SVG string ─────────────────────────────
+
+suite('getSVG — SVG string output', function() {
+
+  test('returns a string containing <svg with correct width and height', function() {
+    const fn = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn);
+
+    const pInst = {
+      width: 300,
+      height: 200,
+      _renderer: {
+        states: {
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
+          strokeWeight: 1
+        },
+        strokeCap() { return 'butt'; },
+        drawShape(shape) { return shape; },
+        push() {},
+        pop() {}
+      },
+      color(...args) { return createMockColor(255, 0, 0, 255, '#ff0000'); },
+      push() {},
+      pop() {}
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    // Build a record and call getSVG on it
+    const shapeObj = pInst.buildShape(() => {
+      // nothing — empty scope
+    });
+
+    const svgStr = pInst.getSVG(shapeObj);
+
+    assert.typeOf(svgStr, 'string', 'getSVG must return a string');
+    assert.include(svgStr, '<svg', 'must contain an <svg opening tag');
+    assert.include(svgStr, 'width="300"', 'must carry the correct width');
+    assert.include(svgStr, 'height="200"', 'must carry the correct height');
+    assert.include(svgStr, 'http://www.w3.org/2000/svg', 'must declare the SVG namespace');
+  });
+});

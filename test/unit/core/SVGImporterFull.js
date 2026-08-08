@@ -1197,3 +1197,53 @@ suite('<defs> and <use> elements', function () {
   });
 });
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. Path parser — T without preceding Q, S without preceding C
+//     Both fall back to using currentX/Y as the implicit control point.
+// ─────────────────────────────────────────────────────────────────────────────
+
+suite('Path parser — T and S fallback (no preceding matching command)', function () {
+
+  test('T with no preceding Q: uses current point as implicit control point', function () {
+    // When lastCommand is NOT Q/q/T/t, handlePathT falls back to cp = (currentX, currentY).
+    // Path: M 0 0 T 20 0 — with fallback: cp = (0,0)
+    const record = createSVG(`
+      <svg xmlns="http://www.w3.org/2000/svg">
+        <path d="M 0 0 T 20 0"/>
+      </svg>
+    `);
+    const cmds = firstChildCommands(record);
+
+    const bv = cmds.filter(c => c.name === 'bezierVertex');
+    // bezierOrder(2) + two bezierVertices (control=currentPt, end)
+    assert.strictEqual(bv.length, 2, 'T without preceding Q must emit 2 bezierVertices');
+    // End vertex (second) = T target: (20, 0)
+    assert.closeTo(bv[1].x, 20, 0.001);
+    assert.closeTo(bv[1].y,  0, 0.001);
+    // Control vertex (first) = current point = (0, 0) — the fallback
+    assert.closeTo(bv[0].x, 0, 0.001);
+    assert.closeTo(bv[0].y, 0, 0.001);
+  });
+
+  test('S with no preceding C: uses current point as implicit cp1', function () {
+    // When lastCommand is NOT C/c/S/s, handlePathS falls back to cp1 = (currentX, currentY).
+    // Path: M 0 0 S 30 -20 40 0 — cp2=(30,-20), end=(40,0), cp1(reflected)=(0,0) (fallback)
+    const record = createSVG(`
+      <svg xmlns="http://www.w3.org/2000/svg">
+        <path d="M 0 0 S 30 -20 40 0"/>
+      </svg>
+    `);
+    const cmds = firstChildCommands(record);
+
+    const bv = cmds.filter(c => c.name === 'bezierVertex');
+    // bezierOrder(3) + 3 bezierVertices
+    assert.strictEqual(bv.length, 3, 'S without preceding C must emit 3 bezierVertices');
+    // Third bezierVertex (end point) = (40, 0)
+    assert.closeTo(bv[2].x, 40, 0.001);
+    assert.closeTo(bv[2].y,  0, 0.001);
+    // First bezierVertex (implicit cp1) = current point = (0, 0) — fallback
+    assert.closeTo(bv[0].x, 0, 0.001);
+    assert.closeTo(bv[0].y, 0, 0.001);
+  });
+});
