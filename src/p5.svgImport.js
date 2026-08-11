@@ -485,6 +485,99 @@ export function SVGImportAddon(p5, fn, lifecycles) {
             }
             const record = this.recorder.getRecord();
             record.sourceSVG = svg.cloneNode(true);
+
+            let viewBox = undefined;
+            if (svg.viewBox && svg.viewBox.baseVal) {
+                try {
+                    const vb = svg.viewBox.baseVal;
+                    if (
+                        typeof vb.x === "number" &&
+                        typeof vb.y === "number" &&
+                        typeof vb.width === "number" &&
+                        typeof vb.height === "number" &&
+                        vb.width > 0 &&
+                        vb.height > 0
+                    ) {
+                        viewBox = {
+                            x: vb.x,
+                            y: vb.y,
+                            width: vb.width,
+                            height: vb.height
+                        };
+                    }
+                } catch (e) {
+                    // Ignore DOMException
+                }
+            }
+            if (!viewBox && svg.hasAttribute && svg.hasAttribute("viewBox")) {
+                const rawVb = svg.getAttribute("viewBox").trim();
+                const parts = rawVb.split(/[\s,]+/).map((v) => parseFloat(v));
+                if (parts.length === 4 && !parts.some((v) => isNaN(v)) && parts[2] > 0 && parts[3] > 0) {
+                    viewBox = {
+                        x: parts[0],
+                        y: parts[1],
+                        width: parts[2],
+                        height: parts[3]
+                    };
+                }
+            }
+
+            let width = undefined;
+            if (svg.width && svg.width.baseVal) {
+                try {
+                    const val = svg.width.baseVal.value;
+                    if (typeof val === "number" && !isNaN(val) && val > 0) {
+                        width = val;
+                    }
+                } catch (e) {
+                    // Ignore
+                }
+            }
+            if (width === undefined && svg.hasAttribute && svg.hasAttribute("width")) {
+                const parsedW = parseFloat(svg.getAttribute("width"));
+                if (!isNaN(parsedW)) {
+                    width = parsedW;
+                }
+            }
+
+            let height = undefined;
+            if (svg.height && svg.height.baseVal) {
+                try {
+                    const val = svg.height.baseVal.value;
+                    if (typeof val === "number" && !isNaN(val) && val > 0) {
+                        height = val;
+                    }
+                } catch (e) {
+                    // Ignore
+                }
+            }
+            if (height === undefined && svg.hasAttribute && svg.hasAttribute("height")) {
+                const parsedH = parseFloat(svg.getAttribute("height"));
+                if (!isNaN(parsedH)) {
+                    height = parsedH;
+                }
+            }
+
+            record.width = width;
+            record.height = height;
+            record.viewBox = viewBox;
+
+            if (viewBox) {
+                record.coordinateBounds = {
+                    x: viewBox.x,
+                    y: viewBox.y,
+                    width: viewBox.width,
+                    height: viewBox.height
+                };
+            } else if (width != null && height != null) {
+                record.coordinateBounds = {
+                    x: 0,
+                    y: 0,
+                    width: width,
+                    height: height
+                };
+            }
+
             return record;
         }
 
