@@ -34,6 +34,12 @@ suite('Addon Integration', function() {
     assert.typeOf(fn.saveSVG, 'function');
     assert.typeOf(fn._svgCaptureAdapters, 'function');
     assert.typeOf(fn._svgCaptureState, 'function');
+    assert.strictEqual(fn.CORNER, 'corner');
+    assert.strictEqual(fn.CENTER, 'center');
+    assert.strictEqual(fn.VIEWBOX, 'viewbox');
+    assert.strictEqual(mockP5.CORNER, 'corner');
+    assert.strictEqual(mockP5.CENTER, 'center');
+    assert.strictEqual(mockP5.VIEWBOX, 'viewbox');
   });
 
   test('should record shapes using createShape, begin and end', function() {
@@ -250,6 +256,60 @@ suite('Addon Integration', function() {
     assert.isTrue(drawShapeCalled, 'drawShape should be called on the renderer');
     assert.isTrue(applyMatrixCalled, 'applyMatrix should be called to set transform');
     assert.strictEqual(strokeCapValue, 'round', 'strokeCap should be replayed');
+  });
+
+  test('should handle shape placement options (translation, scale, align)', function() {
+    const fn = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn);
+
+    const translateCalls = [];
+    const scaleCalls = [];
+    let pushCalled = false;
+    let popCalled = false;
+
+    const pInst = {
+      width: 600,
+      height: 600,
+      _renderer: {
+        states: {
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
+          strokeWeight: 1
+        },
+        strokeCap() { return 'butt'; },
+        drawShape(shape) { return shape; }
+      },
+      translate(x, y) {
+        translateCalls.push([x, y]);
+      },
+      scale(sx, sy) {
+        scaleCalls.push([sx, sy]);
+      },
+      push() { pushCalled = true; },
+      pop() { popCalled = true; }
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    const mockRecord = {
+      coordinateBounds: { x: 10, y: 20, width: 100, height: 200 },
+      type: 'scope',
+      children: []
+    };
+
+    pInst.shape(mockRecord, 50, 100, { scale: 2, align: 'center' });
+
+    assert.isTrue(pushCalled, 'push should be called');
+    assert.isTrue(popCalled, 'pop should be called');
+    // Placement pipeline executes:
+    // 1. anchor: translate(50, 100)
+    // 2. scale: scale(2, 2)
+    // 3. align center: translate(-(10 + 100/2), -(20 + 200/2)) => translate(-60, -120)
+    assert.deepEqual(translateCalls, [[50, 100], [-60, -120]]);
+    assert.deepEqual(scaleCalls, [[2, 2]]);
   });
 
   test('should record shapes via buildShape helper', function() {

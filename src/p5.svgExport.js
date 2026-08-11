@@ -954,9 +954,232 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     return visitor.buildSVG();
   };
 
-  fn.shape = function (record) {
+  const CORNER = 'corner';
+  const CENTER = 'center';
+  const VIEWBOX = 'viewbox';
+
+  fn.CORNER = fn.CORNER || CORNER;
+  fn.CENTER = fn.CENTER || CENTER;
+  fn.VIEWBOX = fn.VIEWBOX || VIEWBOX;
+  if (p5) {
+    p5.CORNER = p5.CORNER || CORNER;
+    p5.CENTER = p5.CENTER || CENTER;
+    p5.VIEWBOX = p5.VIEWBOX || VIEWBOX;
+  }
+
+  function getShapeData(record) {
+    if (!record) return null;
+    if (typeof RecordedShape !== 'undefined' && record instanceof RecordedShape) {
+      return record.data;
+    }
+    return record;
+  }
+
+  function getShapeCoordinateBounds(record) {
+    const data = getShapeData(record);
+    if (!data) return null;
+
+    if (data.coordinateBounds) {
+      return data.coordinateBounds;
+    }
+
+    const vb = data.viewBox || record?.viewBox;
+    if (
+      vb &&
+      typeof vb.width === 'number' &&
+      typeof vb.height === 'number' &&
+      !isNaN(vb.width) &&
+      !isNaN(vb.height) &&
+      vb.width > 0 &&
+      vb.height > 0
+    ) {
+      return {
+        x: typeof vb.x === 'number' && !isNaN(vb.x) ? vb.x : 0,
+        y: typeof vb.y === 'number' && !isNaN(vb.y) ? vb.y : 0,
+        width: vb.width,
+        height: vb.height
+      };
+    }
+
+    const w = data.width ?? record?.width;
+    const h = data.height ?? record?.height;
+    if (w != null && h != null && !isNaN(w) && !isNaN(h) && w > 0 && h > 0) {
+      return {
+        x: 0,
+        y: 0,
+        width: w,
+        height: h
+      };
+    }
+
+    return null;
+  }
+
+  const ALIGNMENT_REGISTRY = {
+    corner: (record) => {
+      const bounds = getShapeCoordinateBounds(record);
+      if (bounds && typeof bounds.x === 'number' && typeof bounds.y === 'number') {
+        return {
+          offsetX: -bounds.x,
+          offsetY: -bounds.y
+        };
+      }
+      return { offsetX: 0, offsetY: 0 };
+    },
+
+    center: (record) => {
+      const bounds = getShapeCoordinateBounds(record);
+      if (bounds && typeof bounds.width === 'number' && typeof bounds.height === 'number') {
+        const minX = typeof bounds.x === 'number' ? bounds.x : 0;
+        const minY = typeof bounds.y === 'number' ? bounds.y : 0;
+        return {
+          offsetX: -(minX + bounds.width / 2),
+          offsetY: -(minY + bounds.height / 2)
+        };
+      }
+      console.warn(
+        'shape(): CENTER alignment requested, but shape record has no valid coordinate bounds metadata.'
+      );
+      return { offsetX: 0, offsetY: 0 };
+    },
+
+    viewbox: () => ({ offsetX: 0, offsetY: 0 })
+  };
+
+  const PLACEMENT_PIPELINE = [
+    {
+      key: 'anchor',
+      resolve(record, options, x, y) {
+        if (x === 0 && y === 0) {
+          return null;
+        }
+        return { x, y };
+      },
+      apply(pInst, params) {
+        if (typeof pInst.translate === 'function') {
+          pInst.translate(params.x, params.y);
+        } else if (typeof pInst.applyMatrix === 'function') {
+          pInst.applyMatrix(1, 0, 0, 1, params.x, params.y);
+        }
+      }
+    },
+    {
+      key: 'scale',
+      resolve(record, options, x, y) {
+        if (!options || options.scale === undefined || options.scale === null) {
+          return null;
+        }
+        const s = options.scale;
+        let scaleX = 1;
+        let scaleY = 1;
+
+        if (typeof s === 'number') {
+          if (!Number.isFinite(s)) {
+            console.warn('shape(): Invalid scale option. Ignoring.');
+            return null;
+          }
+          scaleX = s;
+          scaleY = s;
+        } else if (typeof s === 'object' && s !== null && !Array.isArray(s)) {
+          if (
+            typeof s.x !== 'number' ||
+            !Number.isFinite(s.x) ||
+            typeof s.y !== 'number' ||
+            !Number.isFinite(s.y)
+          ) {
+            console.warn('shape(): Invalid scale option. Ignoring.');
+            return null;
+          }
+          scaleX = s.x;
+          scaleY = s.y;
+        } else {
+          console.warn('shape(): Invalid scale option. Ignoring.');
+          return null;
+        }
+
+        if (scaleX === 1 && scaleY === 1) {
+          return null;
+        }
+
+        return { x: scaleX, y: scaleY };
+      },
+      apply(pInst, params) {
+        if (typeof pInst.scale === 'function') {
+          pInst.scale(params.x, params.y);
+        } else if (typeof pInst.applyMatrix === 'function') {
+          pInst.applyMatrix(params.x, 0, 0, params.y, 0, 0);
+        }
+      }
+    },
+    {
+      key: 'align',
+      resolve(record, options, x, y) {
+        const alignOption = options && options.align !== undefined ? options.align : CORNER;
+        const mode = String(alignOption).trim().toLowerCase();
+
+        const handler = ALIGNMENT_REGISTRY[mode];
+        let offsets;
+
+        if (handler) {
+          offsets = handler(record, options);
+        } else {
+          console.warn(`shape(): Unknown alignment mode "${options.align}". Defaulting to CORNER.`);
+          offsets = ALIGNMENT_REGISTRY.corner(record, options);
+        }
+
+        const offsetX = offsets?.offsetX || 0;
+        const offsetY = offsets?.offsetY || 0;
+
+        if (offsetX === 0 && offsetY === 0) {
+          return null;
+        }
+
+        return { x: offsetX, y: offsetY };
+      },
+      apply(pInst, params) {
+        if (typeof pInst.translate === 'function') {
+          pInst.translate(params.x, params.y);
+        } else if (typeof pInst.applyMatrix === 'function') {
+          pInst.applyMatrix(1, 0, 0, 1, params.x, params.y);
+        }
+      }
+    }
+  ];
+
+  function resolveShapePlacement(record, x, y, options = {}) {
+    const resolved = [];
+    for (const stage of PLACEMENT_PIPELINE) {
+      const params = stage.resolve(record, options, x, y);
+      if (params !== null) {
+        resolved.push({ stage, params });
+      }
+    }
+
+    return {
+      resolved,
+      hasTransform: resolved.length > 0
+    };
+  }
+
+  function applyShapePlacement(pInst, placement) {
+    if (!pInst || !placement || !placement.resolved) return;
+    for (const { stage, params } of placement.resolved) {
+      stage.apply(pInst, params);
+    }
+  }
+
+  fn.shape = function (record, x = 0, y = 0, options = {}) {
     const replay = new CanvasReplay(this);
-    replay.replay(record);
+    const placement = resolveShapePlacement(record, x, y, options);
+
+    if (placement.hasTransform) {
+      if (typeof this.push === 'function') this.push();
+      applyShapePlacement(this, placement);
+      replay.replay(record);
+      if (typeof this.pop === 'function') this.pop();
+    } else {
+      replay.replay(record);
+    }
   };
 
   fn.saveSVG = function (arg1, arg2 = 'drawing.svg') {
