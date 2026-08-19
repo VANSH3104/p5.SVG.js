@@ -28,6 +28,9 @@ function createPInst() {
         strokeColor: 'black',
         strokeWeight: 1
       },
+      strokeCap() {
+        return 'butt';
+      },
       drawShape(shape) { return shape; },
       push() {},
       pop() {},
@@ -68,7 +71,7 @@ function createPInst() {
 suite('ShapeRecorder', function() {
   test('should record basic hierarchy and nodes correctly', function() {
     const pInst = createPInst();
-
+    
     let shape;
     const record = pInst.buildShape(() => {
       // Record background
@@ -233,6 +236,7 @@ suite('ShapeRecorder', function() {
     pInst.noFill = () => {};
     pInst.noStroke = () => {};
     pInst.strokeWeight = () => {};
+    pInst.strokeCap = () => {};
 
     // Mock colors that have _getRGBA
     const mockColor = {
@@ -282,5 +286,72 @@ suite('ShapeRecorder', function() {
 
     assert.strictEqual(record.data.type, 'scope');
     assert.strictEqual(record.data.children.length, 0);
+  });
+
+  test('should record strokeCap state in shape node', function() {
+    const pInst = createPInst();
+    pInst._renderer.strokeCap = () => 'round';
+
+    const record = pInst.buildShape(() => {
+      const shape = new MockShape('line1');
+      pInst._renderer.drawShape(shape);
+    });
+
+    assert.strictEqual(record.data.children.length, 1);
+    const shapeNode = record.data.children[0];
+    assert.strictEqual(shapeNode.type, 'shape');
+    assert.strictEqual(shapeNode.state.strokeCap, 'round');
+  });
+});
+
+
+// ─── Test 8: scale interceptor wiring ────────────────────────────────────────
+
+suite('ShapeRecorder — scale interceptor', function() {
+
+  test('single-arg scale(x) wires to TransformStack and accumulates uniform scale', function() {
+    const pInst = createPInst();
+
+    const record = pInst.buildShape(() => {
+      pInst.scale(3);
+      const shape = new MockShape('scaled_shape');
+      pInst._renderer.drawShape(shape);
+    });
+
+    const shapeNode = record.data.children[0];
+    assert.strictEqual(shapeNode.type, 'shape');
+    const m = shapeNode.state.transform;
+    // scale(3) → uniform: a=3, d=3
+    assert.closeTo(m.a, 3, 0.0001, 'a (scaleX) should be 3');
+    assert.closeTo(m.d, 3, 0.0001, 'd (scaleY) should be 3');
+  });
+
+  test('two-arg scale(x, y) wires to TransformStack and accumulates non-uniform scale', function() {
+    const pInst = createPInst();
+
+    const record = pInst.buildShape(() => {
+      pInst.scale(2, 4);
+      const shape = new MockShape('scaled_shape2');
+      pInst._renderer.drawShape(shape);
+    });
+
+    const shapeNode = record.data.children[0];
+    const m = shapeNode.state.transform;
+    // scale(2, 4) → a=2, d=4
+    assert.closeTo(m.a, 2, 0.0001, 'a (scaleX) should be 2');
+    assert.closeTo(m.d, 4, 0.0001, 'd (scaleY) should be 4');
+  });
+
+  test('scale does not affect p5 instance after buildShape ends', function() {
+    const pInst = createPInst();
+    const origScale = pInst.scale;
+
+    pInst.buildShape(() => {
+      // inside: intercepted
+      assert.notStrictEqual(pInst.scale, origScale);
+    });
+
+    // outside: restored
+    assert.strictEqual(pInst.scale, origScale);
   });
 });

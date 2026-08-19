@@ -132,7 +132,8 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
       fill: states.fillColor,
       stroke: states.strokeColor,
-      strokeWeight: this._renderer.states.strokeWeight
+      strokeWeight: this._renderer.states.strokeWeight,
+      strokeCap: this._renderer.strokeCap()
     };
   };
 
@@ -254,6 +255,10 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
       if (state.stroke && state.strokeWeight != null) {
         el.setAttribute('stroke-width', state.strokeWeight);
+      }
+
+      if (state.strokeCap) {
+        el.setAttribute("stroke-linecap", state.strokeCap);
       }
     }
 
@@ -866,6 +871,9 @@ export function SVGExportAddon(p5, fn, lifecycles) {
 
       if (state.strokeWeight != null) {
         p.strokeWeight(state.strokeWeight);
+      }
+      if (state.strokeCap != null) {
+        p.strokeCap(state.strokeCap);
       }
     }
   }
