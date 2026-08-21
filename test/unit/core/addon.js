@@ -34,6 +34,12 @@ suite('Addon Integration', function() {
     assert.typeOf(fn.saveSVG, 'function');
     assert.typeOf(fn._svgCaptureAdapters, 'function');
     assert.typeOf(fn._svgCaptureState, 'function');
+    assert.strictEqual(fn.CORNER, 'corner');
+    assert.strictEqual(fn.CENTER, 'center');
+    assert.strictEqual(fn.VIEWBOX, 'viewbox');
+    assert.strictEqual(mockP5.CORNER, 'corner');
+    assert.strictEqual(mockP5.CENTER, 'center');
+    assert.strictEqual(mockP5.VIEWBOX, 'viewbox');
   });
 
   test('should record shapes using createShape, begin and end', function() {
@@ -250,6 +256,150 @@ suite('Addon Integration', function() {
     assert.isTrue(drawShapeCalled, 'drawShape should be called on the renderer');
     assert.isTrue(applyMatrixCalled, 'applyMatrix should be called to set transform');
     assert.strictEqual(strokeCapValue, 'round', 'strokeCap should be replayed');
+  });
+
+  test('should warn on invalid scale option in shape placement', function() {
+    const fn = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn);
+
+    const pInst = {
+      width: 600,
+      height: 600,
+      _renderer: {
+        states: {
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
+          strokeWeight: 1
+        },
+        strokeCap() { return 'butt'; },
+        drawShape(shape) { return shape; }
+      },
+      translate() {},
+      scale() {},
+      push() {},
+      pop() {}
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    const mockRecord = { type: 'scope', children: [] };
+    const warnings = [];
+    const originalWarn = console.warn;
+    console.warn = (msg) => { warnings.push(msg); };
+
+    try {
+      // 1. Non-finite number: NaN
+      pInst.shape(mockRecord, 10, 10, { scale: NaN });
+      assert.strictEqual(warnings.length, 1);
+      assert.include(warnings[0], 'Invalid scale option');
+
+      // 2. Non-finite number: Infinity
+      pInst.shape(mockRecord, 10, 10, { scale: Infinity });
+      assert.strictEqual(warnings.length, 2);
+      assert.include(warnings[1], 'Invalid scale option');
+
+      // 3. String value
+      pInst.shape(mockRecord, 10, 10, { scale: 'invalid' });
+      assert.strictEqual(warnings.length, 3);
+      assert.include(warnings[2], 'Invalid scale option');
+
+      // 4. Array value (not a plain object, not a number)
+      pInst.shape(mockRecord, 10, 10, { scale: [2, 3] });
+      assert.strictEqual(warnings.length, 4);
+      assert.include(warnings[3], 'Invalid scale option');
+
+      // 5. Object with non-numeric fields
+      pInst.shape(mockRecord, 10, 10, { scale: { x: 2, y: 'bad' } });
+      assert.strictEqual(warnings.length, 5);
+      assert.include(warnings[4], 'Invalid scale option');
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+
+  test('should warn on unknown alignment mode in shape placement', function() {
+    const fn = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn);
+
+    const pInst = {
+      width: 600,
+      height: 600,
+      _renderer: {
+        states: {
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
+          strokeWeight: 1
+        },
+        strokeCap() { return 'butt'; },
+        drawShape(shape) { return shape; }
+      },
+      translate() {},
+      scale() {},
+      push() {},
+      pop() {}
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    const mockRecord = { type: 'scope', children: [] };
+    const warnings = [];
+    const originalWarn = console.warn;
+    console.warn = (msg) => { warnings.push(msg); };
+
+    try {
+      pInst.shape(mockRecord, 10, 10, { align: 'invalid_mode' });
+      assert.strictEqual(warnings.length, 1);
+      assert.include(warnings[0], 'Unknown alignment mode "invalid_mode"');
+    } finally {
+      console.warn = originalWarn;
+    }
+  });
+
+  test('should warn when CENTER alignment requested without coordinate bounds', function() {
+    const fn = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn);
+
+    const pInst = {
+      width: 600,
+      height: 600,
+      _renderer: {
+        states: {
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
+          strokeWeight: 1
+        },
+        strokeCap() { return 'butt'; },
+        drawShape(shape) { return shape; }
+      },
+      translate() {},
+      scale() {},
+      push() {},
+      pop() {}
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    const mockRecordWithoutBounds = { type: 'scope', children: [] };
+    const warnings = [];
+    const originalWarn = console.warn;
+    console.warn = (msg) => { warnings.push(msg); };
+
+    try {
+      pInst.shape(mockRecordWithoutBounds, 10, 10, { align: 'center' });
+      assert.strictEqual(warnings.length, 1);
+      assert.include(warnings[0], 'CENTER alignment requested, but shape record has no valid coordinate bounds metadata');
+    } finally {
+      console.warn = originalWarn;
+    }
   });
 
   test('should record shapes via buildShape helper', function() {
