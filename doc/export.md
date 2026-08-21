@@ -79,7 +79,6 @@ Returns a new `RecordedShape` instance.
 * **`begin([options])`**: Starts recording drawing commands.
   * `options`: `{ draw: true/false }` (Defaults to `false`).
 * **`end()`**: Stops recording. The captured tree is saved in the shape instance.
-* **`toSVGElement(visitor)`**: Internal method used to traverse the recorded tree structure.
 
 ### Examples
 
@@ -188,28 +187,122 @@ function draw() {
 
 ## 4. Saving and Exporting API
 
-Once you have recorded a shape, you can convert it to raw XML or trigger a file download.
+You can export SVG documents either by triggering a **deferred frame capture** of your regular `draw()` loop or by exporting a **`RecordedShape` object** directly.
+
+---
 
 ### `saveSVG`
-Downloads the recorded shape as an SVG file.
+
+Downloads the sketch or a recorded shape as an SVG file. `saveSVG` supports two modes: **Deferred Frame Export** and **Direct Shape Export**.
+
+#### 1. Deferred Frame Export: `saveSVG([filename])`
+Queues an automatic SVG export for a frame using p5.js lifecycle hooks (`predraw` and `postdraw`).
+
+```js
+saveSVG([filename])
+```
+* **`filename`** `(String)` *(Optional)*: The downloaded file name (defaults to `'drawing.svg'`).
+
+**How it works & timing:**
+* Shape recording automatically starts at `predraw` and stops at `postdraw`, exporting the complete SVG immediately after the frame finishes drawing. The `draw()` loop only runs once for the capture.
+* **Calling in `setup()`**: Queues the export so that the very first frame of `draw()` is captured. Call `saveSVG()` in `setup()` if you want to capture the initial sketch output.
+* **Calling in `draw()` or event handlers (`keyPressed`, `mousePressed`)**: Because `predraw` for the current frame has already finished when `draw()` runs, the export is automatically scheduled and captured on the **next frame**.
+
+#### 2. Direct Shape Export: `saveSVG(record, [filename])`
+Immediately exports an existing `RecordedShape` instance created with `buildShape()` or `createShape()`.
+
 ```js
 saveSVG(record, [filename])
 ```
 * **`record`** `(RecordedShape)`: The recorded shape object.
 * **`filename`** `(String)` *(Optional)*: The downloaded file name (defaults to `'drawing.svg'`).
 
+---
+
 ### `getSVG`
-Returns the raw SVG XML string. Useful if you want to display it inline in the DOM or upload it to a server.
+Returns the raw SVG XML string from a `RecordedShape`. Useful if you want to display it inline in the DOM or upload it to a server.
+
 ```js
 getSVG(record)
 ```
 * **`record`** `(RecordedShape)`: The recorded shape object.
 * **Returns**: `String` containing the serialized SVG document.
 
+---
+
 ### Examples
 
 <details>
-<summary><b>Example: Getting SVG String for inline DOM injection</b></summary>
+<summary><b>Example 1: Deferred Export from setup() (First Frame)</b></summary>
+
+Calling `saveSVG()` in `setup()` captures the canvas during the first `draw()` cycle and downloads it automatically:
+
+```js
+function setup() {
+  createCanvas(400, 400);
+  // Queue deferred export for the first frame
+  saveSVG('first-frame.svg');
+}
+
+function draw() {
+  background(240);
+  fill(255, 100, 100);
+  stroke(0);
+  strokeWeight(2);
+  circle(200, 200, 150);
+  rect(150, 150, 100, 100);
+  noLoop();
+}
+```
+</details>
+
+<details>
+<summary><b>Example 2: Deferred Export Triggered by User Interaction</b></summary>
+
+Calling `saveSVG()` from an event or inside `draw()` captures the full next frame:
+
+```js
+function setup() {
+  createCanvas(400, 400);
+}
+
+function draw() {
+  background(220);
+  fill(0, 120, 255);
+  circle(mouseX, mouseY, 50);
+}
+
+function keyPressed() {
+  if (key === 's') {
+    // Queues export for the next frame
+    saveSVG('interactive-frame.svg');
+  }
+}
+```
+</details>
+
+<details>
+<summary><b>Example 3: Direct RecordedShape Export</b></summary>
+
+Exporting a specific recorded shape immediately:
+
+```js
+function setup() {
+  createCanvas(400, 400);
+
+  const customDrawing = buildShape(() => {
+    fill(0, 200, 100);
+    rect(50, 50, 200, 200);
+  });
+
+  // Exports immediately
+  saveSVG(customDrawing, 'direct-shape.svg');
+}
+```
+</details>
+
+<details>
+<summary><b>Example 4: Getting SVG String for inline DOM injection</b></summary>
 
 ```js
 function setup() {
