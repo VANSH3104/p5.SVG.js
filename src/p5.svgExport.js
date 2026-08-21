@@ -10,8 +10,34 @@ import {
 } from "./p5.ShapeRecorder.js";
 
 export function SVGExportAddon(p5, fn, lifecycles) {
+  let pendingExport = null;
 
+  if (lifecycles) {
+    lifecycles.predraw = function () {
+      if (!pendingExport || pendingExport.shape) {
+        return;
+      }
 
+      pendingExport.shape = this.createShape();
+      pendingExport.shape.begin();
+    };
+
+    lifecycles.postdraw = function () {
+      if (!pendingExport || !pendingExport.shape) {
+        return;
+      }
+
+      pendingExport.shape.end();
+
+      exportRecordedShape(
+        this,
+        pendingExport.shape,
+        pendingExport.filename
+      );
+
+      pendingExport = null;
+    };
+  }
 
   fn._svgCaptureAdapters = function () {
     return {
@@ -884,6 +910,27 @@ export function SVGExportAddon(p5, fn, lifecycles) {
   // API
   // ---------------------------------------------------
 
+  function exportRecordedShape(pInst, record, filename = 'drawing.svg') {
+    const svg = pInst.getSVG(record);
+
+    const blob = new Blob([svg], {
+      type: 'image/svg+xml'
+    });
+
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+
+    // Must append to DOM for browser programmatic download capability
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    URL.revokeObjectURL(url);
+  }
+
   fn.createShape = function () {
     return new RecordedShape(this);
   };
@@ -912,27 +959,25 @@ export function SVGExportAddon(p5, fn, lifecycles) {
     replay.replay(record);
   };
 
-  fn.saveSVG = function (record, filename = 'drawing.svg') {
-    const svg = this.getSVG(record);
+  fn.saveSVG = function (arg1, arg2 = 'drawing.svg') {
+    // Existing API: saveSVG(recordedShape, filename)
+    if (arg1 instanceof RecordedShape || (arg1 && typeof arg1.toSVGElement === 'function')) {
+      exportRecordedShape(this, arg1, arg2);
+      return;
+    }
 
-    const blob = new Blob(
-      [svg],
-      { type: 'image/svg+xml' }
-    );
-
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-
-    a.href = url;
-    a.download = filename;
-
-    // Must append to DOM for browser programmatic download capability
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    URL.revokeObjectURL(url);
+    // New API: saveSVG(filename) or saveSVG()
+    if (typeof arg1 === 'string') {
+      pendingExport = {
+        filename: arg1,
+        p5: this
+      };
+    } else if (typeof arg1 === 'undefined') {
+      pendingExport = {
+        filename: arg2,
+        p5: this
+      };
+    }
   };
 
 };

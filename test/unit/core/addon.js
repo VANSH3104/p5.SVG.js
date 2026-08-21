@@ -436,3 +436,304 @@ suite('getSVG — SVG string output', function() {
     assert.include(svgStr, 'http://www.w3.org/2000/svg', 'must declare the SVG namespace');
   });
 });
+
+
+// ─── Test Suite: Lifecycle & Automatic SVG Export ──────────────────────────
+
+suite('Lifecycle & Automatic SVG Export (saveSVG overload)', function() {
+
+  test('should register predraw and postdraw lifecycle hooks', function() {
+    const fn = {};
+    const lifecycles = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+
+    SVGExportAddon(mockP5, fn, lifecycles);
+
+    assert.typeOf(lifecycles.predraw, 'function', 'predraw lifecycle hook should be registered');
+    assert.typeOf(lifecycles.postdraw, 'function', 'postdraw lifecycle hook should be registered');
+  });
+
+  test('should set pendingExport and capture frame upon saveSVG(filename)', function() {
+    const fn = {};
+    const lifecycles = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn, lifecycles);
+
+    const pInst = {
+      width: 400,
+      height: 400,
+      _renderer: {
+        states: {
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
+          strokeWeight: 1
+        },
+        strokeCap() { return 'butt'; },
+        drawShape(shape) { return shape; },
+        push() {},
+        pop() {}
+      },
+      color(...args) { return createMockColor(255, 0, 0, 255, '#ff0000'); },
+      push() {},
+      pop() {}
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    // Spy DOM export calls
+    let downloadedFilename = null;
+    let clickCalled = false;
+    const originalCreateElement = document.createElement;
+    document.createElement = function(tagName) {
+      const el = originalCreateElement.call(document, tagName);
+      if (tagName === 'a') {
+        el.click = () => {
+          clickCalled = true;
+          downloadedFilename = el.download;
+        };
+      }
+      return el;
+    };
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = () => 'blob:test-auto';
+    URL.revokeObjectURL = () => {};
+
+    try {
+      // 1. Call saveSVG with custom filename string
+      pInst.saveSVG('auto-export.svg');
+
+      // 2. Trigger predraw (starts recording)
+      lifecycles.predraw.call(pInst);
+
+      // 3. Draw a shape during frame
+      const shape = { accept() {} };
+      pInst._renderer.drawShape(shape);
+
+      // 4. Trigger postdraw (ends recording & exports)
+      lifecycles.postdraw.call(pInst);
+
+      assert.isTrue(clickCalled, 'Download link click should have been triggered');
+      assert.strictEqual(downloadedFilename, 'auto-export.svg', 'Filename should match the argument passed to saveSVG');
+    } finally {
+      document.createElement = originalCreateElement;
+      URL.createObjectURL = originalCreateObjectURL;
+      URL.revokeObjectURL = originalRevokeObjectURL;
+    }
+  });
+
+  test('should default to "drawing.svg" when saveSVG() is called without arguments', function() {
+    const fn = {};
+    const lifecycles = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn, lifecycles);
+
+    const pInst = {
+      width: 400,
+      height: 400,
+      _renderer: {
+        states: {
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
+          strokeWeight: 1
+        },
+        strokeCap() { return 'butt'; },
+        drawShape(shape) { return shape; },
+        push() {},
+        pop() {}
+      },
+      color(...args) { return createMockColor(255, 0, 0, 255, '#ff0000'); },
+      push() {},
+      pop() {}
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    let downloadedFilename = null;
+    const originalCreateElement = document.createElement;
+    document.createElement = function(tagName) {
+      const el = originalCreateElement.call(document, tagName);
+      if (tagName === 'a') {
+        el.click = () => { downloadedFilename = el.download; };
+      }
+      return el;
+    };
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = () => 'blob:test-default';
+    URL.revokeObjectURL = () => {};
+
+    try {
+      pInst.saveSVG(); // No args
+      lifecycles.predraw.call(pInst);
+      lifecycles.postdraw.call(pInst);
+
+      assert.strictEqual(downloadedFilename, 'drawing.svg', 'Default filename should be drawing.svg');
+    } finally {
+      document.createElement = originalCreateElement;
+      URL.createObjectURL = originalCreateObjectURL;
+      URL.revokeObjectURL = originalRevokeObjectURL;
+    }
+  });
+
+  test('should handle saveSVG(filename) called during draw() execution', function() {
+    const fn = {};
+    const lifecycles = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn, lifecycles);
+
+    const pInst = {
+      width: 400,
+      height: 400,
+      _renderer: {
+        states: {
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
+          strokeWeight: 1
+        },
+        strokeCap() { return 'butt'; },
+        drawShape(shape) { return shape; },
+        push() {},
+        pop() {}
+      },
+      color(...args) { return createMockColor(255, 0, 0, 255, '#ff0000'); },
+      push() {},
+      pop() {}
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    let downloadedFilename = null;
+    let exportCount = 0;
+    const originalCreateElement = document.createElement;
+    document.createElement = function(tagName) {
+      const el = originalCreateElement.call(document, tagName);
+      if (tagName === 'a') {
+        el.click = () => {
+          exportCount++;
+          downloadedFilename = el.download;
+        };
+      }
+      return el;
+    };
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = () => 'blob:test-inside-draw';
+    URL.revokeObjectURL = () => {};
+
+    try {
+      // Frame 1 predraw (no export pending)
+      lifecycles.predraw.call(pInst);
+
+      // Call saveSVG during draw() execution
+      pInst.saveSVG('inside-draw.svg');
+
+      // Frame 1 postdraw (shape was not started in Frame 1 predraw)
+      lifecycles.postdraw.call(pInst);
+      assert.strictEqual(exportCount, 0, 'Should not export immediately on frame 1 postdraw');
+
+      // Frame 2 predraw (now pendingExport is picked up)
+      lifecycles.predraw.call(pInst);
+
+      // Frame 2 postdraw (completes capture and exports)
+      lifecycles.postdraw.call(pInst);
+      assert.strictEqual(exportCount, 1, 'Should export on frame 2 postdraw');
+      assert.strictEqual(downloadedFilename, 'inside-draw.svg');
+    } finally {
+      document.createElement = originalCreateElement;
+      URL.createObjectURL = originalCreateObjectURL;
+      URL.revokeObjectURL = originalRevokeObjectURL;
+    }
+  });
+
+  test('should do nothing safely in predraw and postdraw when no export is pending', function() {
+    const fn = {};
+    const lifecycles = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn, lifecycles);
+
+    const pInst = {
+      width: 400,
+      height: 400
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    // Call predraw and postdraw without saveSVG
+    assert.doesNotThrow(() => {
+      lifecycles.predraw.call(pInst);
+      lifecycles.postdraw.call(pInst);
+    });
+  });
+
+  test('should export RecordedShape instance directly when passed to saveSVG', function() {
+    const fn = {};
+    const lifecycles = {};
+    const mockP5 = {
+      PrimitiveVisitor: class {},
+      registerAddon() {}
+    };
+    SVGExportAddon(mockP5, fn, lifecycles);
+
+    const pInst = {
+      width: 400,
+      height: 400,
+      _renderer: {
+        states: {
+          fillColor: createMockColor(255, 0, 0, 255, '#ff0000'),
+          strokeColor: createMockColor(0, 0, 0, 255, '#000000'),
+          strokeWeight: 1
+        },
+        strokeCap() { return 'butt'; },
+        drawShape(shape) { return shape; },
+        push() {},
+        pop() {}
+      },
+      color(...args) { return createMockColor(255, 0, 0, 255, '#ff0000'); },
+      push() {},
+      pop() {}
+    };
+    Object.setPrototypeOf(pInst, fn);
+
+    const recordedShape = pInst.buildShape(() => {
+      const shape = { accept() {} };
+      pInst._renderer.drawShape(shape);
+    });
+
+    let downloadedFilename = null;
+    const originalCreateElement = document.createElement;
+    document.createElement = function(tagName) {
+      const el = originalCreateElement.call(document, tagName);
+      if (tagName === 'a') {
+        el.click = () => { downloadedFilename = el.download; };
+      }
+      return el;
+    };
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = () => 'blob:test-instance';
+    URL.revokeObjectURL = () => {};
+
+    try {
+      pInst.saveSVG(recordedShape, 'direct-instance.svg');
+      assert.strictEqual(downloadedFilename, 'direct-instance.svg', 'Should immediately download RecordedShape');
+    } finally {
+      document.createElement = originalCreateElement;
+      URL.createObjectURL = originalCreateObjectURL;
+      URL.revokeObjectURL = originalRevokeObjectURL;
+    }
+  });
+
+});
+
