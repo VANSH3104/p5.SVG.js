@@ -19,7 +19,7 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       }
 
       pendingExport.shape = this.createShape();
-      pendingExport.shape.begin();
+      pendingExport.shape.begin({ draw: true });
     };
 
     lifecycles.postdraw = function () {
