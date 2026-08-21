@@ -365,8 +365,21 @@ export function SVGExportAddon(p5, fn, lifecycles) {
       if (lineSegment.isClosing) {
         d += ' Z';
       } else {
-        const vertex = lineSegment.getEndVertex();
-        d += ` L ${vertex.position.x} ${vertex.position.y}`;
+        const vertices = lineSegment.vertices;
+        if (vertices && vertices.length > 0) {
+          const len = vertices.length;
+          for (let i = 0; i < len; i++) {
+            const v = vertices[i];
+            const pos = v.position || v;
+            d += ` L ${pos.x} ${pos.y}`;
+          }
+        } else if (typeof lineSegment.getEndVertex === 'function') {
+          const vertex = lineSegment.getEndVertex();
+          if (vertex) {
+            const pos = vertex.position || vertex;
+            d += ` L ${pos.x} ${pos.y}`;
+          }
+        }
       }
       this.currentPathElement.setAttribute('d', d);
     }
