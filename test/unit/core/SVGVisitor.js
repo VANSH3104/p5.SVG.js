@@ -280,18 +280,28 @@ suite('SVGVisitor', function() {
     });
     assert.strictEqual(visitor.currentPathElement.getAttribute('d'), 'M 10 20');
 
-    // visitLineSegment (not closing)
+    // visitLineSegment (not closing - legacy single vertex getEndVertex)
     visitor.visitLineSegment({
       isClosing: false,
       getEndVertex() { return { position: { x: 30, y: 40 } }; }
     });
     assert.strictEqual(visitor.currentPathElement.getAttribute('d'), 'M 10 20 L 30 40');
 
+    // visitLineSegment (batched vertices array from p5.js 2.3.2)
+    visitor.visitLineSegment({
+      isClosing: false,
+      vertices: [
+        { position: { x: 50, y: 60 } },
+        { position: { x: 70, y: 80 } }
+      ]
+    });
+    assert.strictEqual(visitor.currentPathElement.getAttribute('d'), 'M 10 20 L 30 40 L 50 60 L 70 80');
+
     // visitLineSegment (closing)
     visitor.visitLineSegment({
       isClosing: true
     });
-    assert.strictEqual(visitor.currentPathElement.getAttribute('d'), 'M 10 20 L 30 40 Z');
+    assert.strictEqual(visitor.currentPathElement.getAttribute('d'), 'M 10 20 L 30 40 L 50 60 L 70 80 Z');
   });
 
   test('visitBezierSegment should append quadratic or cubic Bezier curves to path', function() {
