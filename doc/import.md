@@ -157,7 +157,148 @@ function draw() {
 
 ---
 
-## 4. Features Supported & Rendering Details
+## 4. Shape Placement, Alignment & Scaling (`shape`)
+
+> [!NOTE]
+> **Experimental Feature**: The shape placement and alignment options (`shape(record, x, y, options)`, `align`, `scale`, `CORNER`, `CENTER`, `VIEWBOX`) are experimental and actively evolving. We welcome community feedback, use cases, and suggestions to help refine these APIs!
+
+When rendering an imported SVG with `shape()`, you can pass position coordinates `(x, y)` and an `options` configuration object to control alignment and scaling directly without manually wrapping calls in `push()`, `translate()`, `scale()`, and `pop()`.
+
+### API Signature
+```js
+shape(record, [x], [y], [options])
+```
+* **`record`** `(RecordedShape)`: The imported shape object from `loadSVG()` or `createSVG()`.
+* **`x`** `(Number)` *(Optional, default: `0`)*: The x-coordinate to anchor the shape.
+* **`y`** `(Number)` *(Optional, default: `0`)*: The y-coordinate to anchor the shape.
+* **`options`** `(Object)` *(Optional)*:
+  * **`align`** `(String)`: Alignment mode for positioning. Options include:
+    * **`CORNER`** *(or `'corner'`, default)*: Aligns the top-left corner of the shape's coordinate bounds to `(x, y)`. Normalizes any non-zero viewBox offsets (e.g., `viewBox="30 30 100 100"` or negative origins).
+    * **`CENTER`** *(or `'center'`)*: Centers the shape's bounding box precisely at `(x, y)`.
+    * **`VIEWBOX`** *(or `'viewbox'`)*: Preserves raw SVG coordinates without bounding box offset normalization, translating the origin `(0, 0)` directly to `(x, y)`.
+  * **`scale`** `(Number | Object)`: Scaling factor to apply:
+    * **Uniform scaling**: A single number (e.g. `{ scale: 0.5 }` or `{ scale: 2 }`).
+    * **Non-uniform scaling**: An object with independent axes (e.g. `{ scale: { x: 1.5, y: 0.8 } }`).
+
+### Coordinate Bounds Metadata
+During import, `SVGImporter` extracts geometric bounds from the SVG root and attaches metadata to the `RecordedShape`:
+* `record.viewBox`: Parsed `{ x, y, width, height }` from the SVG `viewBox` attribute.
+* `record.width` / `record.height`: Dimensions defined on the `<svg>` tag.
+* `record.coordinateBounds`: Resolved coordinate bounds `{ x, y, width, height }` used by `CORNER` and `CENTER` alignments.
+
+### Transform Isolation
+When `x`, `y`, `scale`, or non-zero alignment offsets are applied, `shape()` automatically wraps transformations inside `push()` and `pop()`. Subsequent drawing operations on the canvas remain completely unaffected.
+
+---
+
+### Placement & Alignment Examples
+
+<details>
+<summary><b>Example 1: Centering an Imported SVG on Canvas</b></summary>
+
+Place the geometric center of an imported SVG directly at the center of the canvas:
+
+```js
+let icon;
+
+async function setup() {
+  createCanvas(400, 400);
+  icon = await loadSVG('assets/star.svg');
+}
+
+function draw() {
+  background(240);
+
+  if (icon) {
+    // Aligns the center of the SVG icon to canvas center (200, 200)
+    shape(icon, width / 2, height / 2, {
+      align: CENTER,
+      scale: 0.75
+    });
+  }
+}
+```
+</details>
+
+<details>
+<summary><b>Example 2: Comparing Alignment Modes (`CORNER`, `CENTER`, `VIEWBOX`)</b></summary>
+
+```js
+let logo;
+
+async function setup() {
+  createCanvas(600, 200);
+  logo = await loadSVG('assets/logo.svg');
+}
+
+function draw() {
+  background(245);
+
+  if (!logo) return;
+
+  // CORNER alignment
+  shape(logo, 100, 100, {
+    align: CORNER,
+    scale: 0.8
+  });
+
+  noStroke();
+  fill(255, 0, 0);
+  circle(100, 100, 10);
+
+  // CENTER alignment
+  shape(logo, 300, 100, {
+    align: CENTER,
+    scale: 0.8
+  });
+
+  fill(0, 0, 255);
+  circle(300, 100, 10);
+
+  // VIEWBOX alignment
+  shape(logo, 500, 100, {
+    align: VIEWBOX,
+    scale: 0.8
+  });
+
+  fill(0, 200, 0);
+  circle(500, 100, 10);
+}
+```
+</details>
+
+<details>
+<summary><b>Example 3: Non-Uniform Scaling & Grid Layout</b></summary>
+
+```js
+let flower;
+
+async function setup() {
+  createCanvas(400, 400);
+  flower = await loadSVG('assets/flower.svg');
+}
+
+function draw() {
+  background(255);
+  if (!flower) return;
+
+  // Render a 2x2 grid with different scaling factors and CENTER alignment
+  const size = 100;
+  for (let x = 100; x <= 300; x += size * 2) {
+    for (let y = 100; y <= 300; y += size * 2) {
+      shape(flower, x, y, {
+        align: CENTER,
+        scale: { x: 0.5, y: 0.8 } // Stretch vertically
+      });
+    }
+  }
+}
+```
+</details>
+
+---
+
+## 5. Features Supported & Rendering Details
 
 The SVG Importer supports standard SVG elements and translates them directly to p5.js Shape commands:
 
@@ -174,4 +315,5 @@ The SVG Importer supports standard SVG elements and translates them directly to 
 * Image elements (`<image>`) are not yet supported in import.
 * Clipping paths (`<clipPath>`) and clip masks are not yet supported.
 * Complex filters, gradients, and patterns (`url(#...)`) are not yet supported.
+
 
