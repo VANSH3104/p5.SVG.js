@@ -337,7 +337,7 @@ export function visualTest(
       window.devicePixelRatio = 1;
 
       if (!window.p5) {
-        const response = await fetch('https://cdn.jsdelivr.net/npm/p5@2.3.1/lib/p5.js');
+        const response = await fetch('https://cdn.jsdelivr.net/npm/p5@2.3.2/lib/p5.js');
         const code = await response.text();
         const modifiedCode = code + '\nwindow.p5 = p5; export default p5;';
         const blob = new Blob([modifiedCode], { type: 'application/javascript' });

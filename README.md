@@ -31,12 +31,12 @@ Include the p5.js library and the `p5.svg-io` addons in your project's `index.ht
 <head>
   <title>p5.SVG Example</title>
   <!-- Load p5.js -->
-  <script src="https://cdn.jsdelivr.net/npm/p5@2.3.1/lib/p5.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@2.3.2/lib/p5.js"></script>
   
   <!-- Load p5.SVG Export Addon -->
-  <script src="https://cdn.jsdelivr.net/npm/p5.svg-io@0.1.4/dist/p5.svgExport.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5.svg-io@0.1.5/dist/p5.svgExport.min.js"></script>
   <!-- Load p5.SVG Import Addon -->
-  <script src="https://cdn.jsdelivr.net/npm/p5.svg-io@0.1.4/dist/p5.svgImport.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5.svg-io@0.1.5/dist/p5.svgImport.min.js"></script>
 </head>
 <body>
   <script src="sketch.js"></script>
