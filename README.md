@@ -16,6 +16,7 @@ Try it live in the [p5.js Web Editor](https://editor.p5js.org/vanshkabra05/colle
 For detailed explanations of the APIs along with comprehensive examples, check out the documentation guides:
 - [SVG Export API Guide](doc/export.md)
 - [SVG Import API Guide](doc/import.md)
+- [Video Tutorial Playlist](https://www.youtube.com/playlist?list=PLfSK1t5BHz4c)
 
 ---
 

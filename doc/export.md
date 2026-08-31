@@ -2,6 +2,8 @@
 
 The SVG Export addon allows you to record your p5.js drawing commands and export them as high-quality, scalable SVG documents. You can capture sketches synchronously, dynamically across frames, or render previously recorded shapes back to the canvas.
 
+> 📺 **Video Tutorials:** Check out the [p5.SVG Video Tutorial Playlist](https://www.youtube.com/playlist?list=PLfSK1t5BHz4c) on YouTube.
+
 ---
 
 ## 1. Functional Capture (`buildShape`)

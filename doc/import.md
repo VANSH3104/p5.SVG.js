@@ -2,6 +2,8 @@
 
 The SVG Import addon allows you to load and parse external SVG files/strings directly into p5.js, translating SVG elements and attributes into a `RecordedShape` object that can be rendered using p5's native Canvas rendering system.
 
+> 📺 **Video Tutorials:** Check out the [p5.SVG Video Tutorial Playlist](https://www.youtube.com/playlist?list=PLfSK1t5BHz4c) on YouTube.
+
 ---
 
 ## 1. Importing from File (`loadSVG`)
